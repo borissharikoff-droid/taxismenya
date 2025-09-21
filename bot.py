@@ -2,12 +2,17 @@ import asyncio
 import logging
 import random
 import os
+import requests
+import tempfile
 from datetime import datetime, timedelta
-from telegram import Bot
+from telegram import Bot, InputMediaPhoto
 from telegram.error import TelegramError
 import schedule
 import time
 from threading import Thread
+from bs4 import BeautifulSoup
+from PIL import Image
+import io
 
 # Настройка логирования
 logging.basicConfig(
@@ -365,14 +370,133 @@ class WorkBot:
             
         return text
 
+    def search_churka_image(self):
+        """Ищет изображение с чурками в интернете"""
+        try:
+            # Список поисковых запросов для чурок
+            search_queries = [
+                "churka meme",
+                "churka face",
+                "churka character",
+                "churka cartoon",
+                "churka funny",
+                "churka image",
+                "churka picture",
+                "churka meme face"
+            ]
+            
+            # Выбираем случайный запрос
+            query = random.choice(search_queries)
+            
+            # Используем Google Images API (бесплатный)
+            search_url = f"https://www.google.com/search?q={query}&tbm=isch"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
+            response = requests.get(search_url, headers=headers, timeout=10)
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Ищем изображения в результатах
+            images = soup.find_all('img')
+            image_urls = []
+            
+            for img in images:
+                src = img.get('src')
+                if src and src.startswith('http') and any(ext in src.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
+                    image_urls.append(src)
+            
+            if image_urls:
+                # Выбираем случайное изображение
+                selected_url = random.choice(image_urls[:10])  # Берем из первых 10
+                logger.info(f"Найдено изображение: {selected_url}")
+                return selected_url
+            else:
+                logger.warning("Не удалось найти изображения")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Ошибка при поиске изображения: {e}")
+            return None
+
+    def download_image(self, image_url):
+        """Скачивает изображение по URL"""
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
+            response = requests.get(image_url, headers=headers, timeout=15)
+            response.raise_for_status()
+            
+            # Проверяем размер файла (не больше 5MB)
+            if len(response.content) > 5 * 1024 * 1024:
+                logger.warning("Изображение слишком большое, пропускаем")
+                return None
+            
+            # Создаем временный файл
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+            temp_file.write(response.content)
+            temp_file.close()
+            
+            logger.info(f"Изображение скачано: {temp_file.name}")
+            return temp_file.name
+            
+        except Exception as e:
+            logger.error(f"Ошибка при скачивании изображения: {e}")
+            return None
+
     async def send_message_to_channel(self):
-        """Отправляет сообщение в канал"""
+        """Отправляет сообщение с изображением в канал"""
         try:
             message = self.generate_message()
-            await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
-            logger.info(f"Сообщение отправлено: {message}")
+            
+            # Ищем изображение с чурками
+            image_url = self.search_churka_image()
+            
+            if image_url:
+                # Скачиваем изображение
+                image_path = self.download_image(image_url)
+                
+                if image_path:
+                    try:
+                        # Отправляем сообщение с изображением
+                        with open(image_path, 'rb') as photo:
+                            await self.bot.send_photo(
+                                chat_id=CHANNEL_ID,
+                                photo=photo,
+                                caption=message
+                            )
+                        logger.info(f"Сообщение с изображением отправлено: {message}")
+                        
+                        # Удаляем временный файл
+                        os.unlink(image_path)
+                        
+                    except Exception as e:
+                        logger.error(f"Ошибка при отправке фото: {e}")
+                        # Если не удалось отправить с фото, отправляем только текст
+                        await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
+                        logger.info(f"Сообщение без изображения отправлено: {message}")
+                else:
+                    # Если не удалось скачать изображение, отправляем только текст
+                    await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
+                    logger.info(f"Сообщение без изображения отправлено: {message}")
+            else:
+                # Если не удалось найти изображение, отправляем только текст
+                await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
+                logger.info(f"Сообщение без изображения отправлено: {message}")
+                
         except TelegramError as e:
             logger.error(f"Ошибка при отправке сообщения: {e}")
+        except Exception as e:
+            logger.error(f"Неожиданная ошибка при отправке сообщения: {e}")
+            # В случае любой ошибки пытаемся отправить хотя бы текст
+            try:
+                message = self.generate_message()
+                await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
+                logger.info(f"Резервное сообщение отправлено: {message}")
+            except:
+                logger.error("Не удалось отправить даже резервное сообщение")
 
     def send_message_sync(self):
         """Синхронная обертка для отправки сообщения"""
