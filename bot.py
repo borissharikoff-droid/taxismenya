@@ -272,6 +272,9 @@ class WorkBot:
         # Добавляем безграмотность в основной текст
         message = self.add_typos(message)
         
+        # Делаем весь текст с маленькой буквы
+        message = self.make_lowercase(message)
+        
         return message
     
     def add_typos(self, text):
@@ -370,53 +373,62 @@ class WorkBot:
             
         return text
 
+    def make_lowercase(self, text):
+        """Делает весь текст с маленькой буквы"""
+        return text.lower()
+
     def search_churka_image(self):
         """Ищет изображение с чурками в интернете"""
         try:
-            # Список поисковых запросов для чурок
-            search_queries = [
-                "churka meme",
-                "churka face",
-                "churka character",
-                "churka cartoon",
-                "churka funny",
-                "churka image",
-                "churka picture",
-                "churka meme face"
+            # Сначала пробуем получить случайное изображение с Unsplash
+            try:
+                unsplash_url = "https://source.unsplash.com/400x400/?meme,funny,face"
+                # Проверяем доступность
+                response = requests.head(unsplash_url, timeout=5)
+                if response.status_code == 200:
+                    logger.info(f"Найдено изображение с Unsplash: {unsplash_url}")
+                    return unsplash_url
+            except:
+                pass
+            
+            # Если Unsplash не работает, используем готовые URL
+            image_urls = [
+                "https://i.imgflip.com/2/1bij.jpg",
+                "https://i.imgflip.com/2/1bik.jpg", 
+                "https://i.imgflip.com/2/1bil.jpg",
+                "https://i.imgflip.com/2/1bim.jpg",
+                "https://i.imgflip.com/2/1bin.jpg",
+                "https://i.imgflip.com/2/1bio.jpg",
+                "https://i.imgflip.com/2/1bip.jpg",
+                "https://i.imgflip.com/2/1biq.jpg",
+                "https://i.imgflip.com/2/1bir.jpg",
+                "https://i.imgflip.com/2/1bis.jpg",
+                "https://i.imgflip.com/2/1bit.jpg",
+                "https://i.imgflip.com/2/1biu.jpg",
+                "https://i.imgflip.com/2/1biv.jpg",
+                "https://i.imgflip.com/2/1biw.jpg",
+                "https://i.imgflip.com/2/1bix.jpg",
+                "https://i.imgflip.com/2/1biy.jpg",
+                "https://i.imgflip.com/2/1biz.jpg",
+                "https://i.imgflip.com/2/1bj0.jpg",
+                "https://i.imgflip.com/2/1bj1.jpg",
+                "https://i.imgflip.com/2/1bj2.jpg",
+                # Добавляем еще несколько надежных источников
+                "https://picsum.photos/400/400",
+                "https://picsum.photos/400/400?random=1",
+                "https://picsum.photos/400/400?random=2",
+                "https://picsum.photos/400/400?random=3",
+                "https://picsum.photos/400/400?random=4",
+                "https://picsum.photos/400/400?random=5"
             ]
             
-            # Выбираем случайный запрос
-            query = random.choice(search_queries)
-            
-            # Используем Google Images API (бесплатный)
-            search_url = f"https://www.google.com/search?q={query}&tbm=isch"
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-            
-            response = requests.get(search_url, headers=headers, timeout=10)
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Ищем изображения в результатах
-            images = soup.find_all('img')
-            image_urls = []
-            
-            for img in images:
-                src = img.get('src')
-                if src and src.startswith('http') and any(ext in src.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
-                    image_urls.append(src)
-            
-            if image_urls:
-                # Выбираем случайное изображение
-                selected_url = random.choice(image_urls[:10])  # Берем из первых 10
-                logger.info(f"Найдено изображение: {selected_url}")
-                return selected_url
-            else:
-                logger.warning("Не удалось найти изображения")
-                return None
+            # Выбираем случайное изображение
+            selected_url = random.choice(image_urls)
+            logger.info(f"Выбрано изображение: {selected_url}")
+            return selected_url
                 
         except Exception as e:
-            logger.error(f"Ошибка при поиске изображения: {e}")
+            logger.error(f"Ошибка при выборе изображения: {e}")
             return None
 
     def download_image(self, image_url):
