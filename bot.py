@@ -379,15 +379,25 @@ class WorkBot:
         asyncio.run(self.send_message_to_channel())
 
     def schedule_messages(self):
-        """Планирует отправку сообщений 3 раза в день"""
-        # 9:00 утра
-        schedule.every().day.at("09:00").do(self.send_message_sync)
+        """Планирует отправку сообщений 8 раз в день"""
+        # 8:00 утра
+        schedule.every().day.at("08:00").do(self.send_message_sync)
+        # 10:00 утра
+        schedule.every().day.at("10:00").do(self.send_message_sync)
+        # 12:00 дня
+        schedule.every().day.at("12:00").do(self.send_message_sync)
         # 14:00 дня  
         schedule.every().day.at("14:00").do(self.send_message_sync)
-        # 19:00 вечера
-        schedule.every().day.at("19:00").do(self.send_message_sync)
+        # 16:00 дня
+        schedule.every().day.at("16:00").do(self.send_message_sync)
+        # 18:00 вечера
+        schedule.every().day.at("18:00").do(self.send_message_sync)
+        # 20:00 вечера
+        schedule.every().day.at("20:00").do(self.send_message_sync)
+        # 22:00 вечера
+        schedule.every().day.at("22:00").do(self.send_message_sync)
         
-        logger.info("Расписание сообщений настроено: 09:00, 14:00, 19:00")
+        logger.info("Расписание сообщений настроено: 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00")
 
     def run_scheduler(self):
         """Запускает планировщик в отдельном потоке"""
@@ -409,7 +419,7 @@ class WorkBot:
             scheduler_thread = Thread(target=self.run_scheduler, daemon=True)
             scheduler_thread.start()
             
-            logger.info("Бот готов к работе! Сообщения будут отправляться в 09:00, 14:00 и 19:00")
+            logger.info("Бот готов к работе! Сообщения будут отправляться в 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00")
             
             # Отправляем тестовое сообщение
             await self.send_message_to_channel()
