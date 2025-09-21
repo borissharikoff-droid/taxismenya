@@ -380,46 +380,40 @@ class WorkBot:
     def search_churka_image(self):
         """Ищет изображение с чурками в интернете"""
         try:
-            # Сначала пробуем получить случайное изображение с Unsplash
-            try:
-                unsplash_url = "https://source.unsplash.com/400x400/?meme,funny,face"
-                # Проверяем доступность
-                response = requests.head(unsplash_url, timeout=5)
-                if response.status_code == 200:
-                    logger.info(f"Найдено изображение с Unsplash: {unsplash_url}")
-                    return unsplash_url
-            except:
-                pass
-            
-            # Если Unsplash не работает, используем готовые URL
+            # Список надежных URL изображений
             image_urls = [
-                "https://i.imgflip.com/2/1bij.jpg",
-                "https://i.imgflip.com/2/1bik.jpg", 
-                "https://i.imgflip.com/2/1bil.jpg",
-                "https://i.imgflip.com/2/1bim.jpg",
-                "https://i.imgflip.com/2/1bin.jpg",
-                "https://i.imgflip.com/2/1bio.jpg",
-                "https://i.imgflip.com/2/1bip.jpg",
-                "https://i.imgflip.com/2/1biq.jpg",
-                "https://i.imgflip.com/2/1bir.jpg",
-                "https://i.imgflip.com/2/1bis.jpg",
-                "https://i.imgflip.com/2/1bit.jpg",
-                "https://i.imgflip.com/2/1biu.jpg",
-                "https://i.imgflip.com/2/1biv.jpg",
-                "https://i.imgflip.com/2/1biw.jpg",
-                "https://i.imgflip.com/2/1bix.jpg",
-                "https://i.imgflip.com/2/1biy.jpg",
-                "https://i.imgflip.com/2/1biz.jpg",
-                "https://i.imgflip.com/2/1bj0.jpg",
-                "https://i.imgflip.com/2/1bj1.jpg",
-                "https://i.imgflip.com/2/1bj2.jpg",
-                # Добавляем еще несколько надежных источников
+                # Lorem Picsum - случайные изображения
                 "https://picsum.photos/400/400",
                 "https://picsum.photos/400/400?random=1",
-                "https://picsum.photos/400/400?random=2",
+                "https://picsum.photos/400/400?random=2", 
                 "https://picsum.photos/400/400?random=3",
                 "https://picsum.photos/400/400?random=4",
-                "https://picsum.photos/400/400?random=5"
+                "https://picsum.photos/400/400?random=5",
+                "https://picsum.photos/400/400?random=6",
+                "https://picsum.photos/400/400?random=7",
+                "https://picsum.photos/400/400?random=8",
+                "https://picsum.photos/400/400?random=9",
+                "https://picsum.photos/400/400?random=10",
+                # Unsplash - случайные изображения
+                "https://source.unsplash.com/400x400/?random",
+                "https://source.unsplash.com/400x400/?nature",
+                "https://source.unsplash.com/400x400/?city",
+                "https://source.unsplash.com/400x400/?people",
+                "https://source.unsplash.com/400x400/?abstract",
+                "https://source.unsplash.com/400x400/?technology",
+                "https://source.unsplash.com/400x400/?business",
+                "https://source.unsplash.com/400x400/?food",
+                "https://source.unsplash.com/400x400/?travel",
+                "https://source.unsplash.com/400x400/?animals",
+                # Другие надежные источники
+                "https://via.placeholder.com/400x400/FF6B6B/FFFFFF?text=Work",
+                "https://via.placeholder.com/400x400/4ECDC4/FFFFFF?text=Job",
+                "https://via.placeholder.com/400x400/45B7D1/FFFFFF?text=Money",
+                "https://via.placeholder.com/400x400/96CEB4/FFFFFF?text=Task",
+                "https://via.placeholder.com/400x400/FFEAA7/FFFFFF?text=Help",
+                "https://via.placeholder.com/400x400/DDA0DD/FFFFFF?text=Work",
+                "https://via.placeholder.com/400x400/98D8C8/FFFFFF?text=Job",
+                "https://via.placeholder.com/400x400/F7DC6F/FFFFFF?text=Task"
             ]
             
             # Выбираем случайное изображение
@@ -463,40 +457,42 @@ class WorkBot:
         try:
             message = self.generate_message()
             
-            # Ищем изображение с чурками
+            # Получаем URL изображения
             image_url = self.search_churka_image()
             
             if image_url:
-                # Скачиваем изображение
-                image_path = self.download_image(image_url)
-                
-                if image_path:
+                try:
+                    # Отправляем изображение напрямую по URL (более надежный способ)
+                    await self.bot.send_photo(
+                        chat_id=CHANNEL_ID,
+                        photo=image_url,
+                        caption=message
+                    )
+                    logger.info(f"Сообщение с изображением отправлено: {message}")
+                    return
+                    
+                except Exception as e:
+                    logger.error(f"Ошибка при отправке фото по URL: {e}")
+                    # Пробуем скачать и отправить
                     try:
-                        # Отправляем сообщение с изображением
-                        with open(image_path, 'rb') as photo:
-                            await self.bot.send_photo(
-                                chat_id=CHANNEL_ID,
-                                photo=photo,
-                                caption=message
-                            )
-                        logger.info(f"Сообщение с изображением отправлено: {message}")
-                        
-                        # Удаляем временный файл
-                        os.unlink(image_path)
-                        
-                    except Exception as e:
-                        logger.error(f"Ошибка при отправке фото: {e}")
-                        # Если не удалось отправить с фото, отправляем только текст
-                        await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
-                        logger.info(f"Сообщение без изображения отправлено: {message}")
-                else:
-                    # Если не удалось скачать изображение, отправляем только текст
-                    await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
-                    logger.info(f"Сообщение без изображения отправлено: {message}")
-            else:
-                # Если не удалось найти изображение, отправляем только текст
-                await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
-                logger.info(f"Сообщение без изображения отправлено: {message}")
+                        image_path = self.download_image(image_url)
+                        if image_path:
+                            with open(image_path, 'rb') as photo:
+                                await self.bot.send_photo(
+                                    chat_id=CHANNEL_ID,
+                                    photo=photo,
+                                    caption=message
+                                )
+                            logger.info(f"Сообщение с изображением отправлено (скачанное): {message}")
+                            # Удаляем временный файл
+                            os.unlink(image_path)
+                            return
+                    except Exception as e2:
+                        logger.error(f"Ошибка при отправке скачанного фото: {e2}")
+            
+            # Если ничего не сработало, отправляем только текст
+            await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
+            logger.info(f"Сообщение без изображения отправлено: {message}")
                 
         except TelegramError as e:
             logger.error(f"Ошибка при отправке сообщения: {e}")
@@ -560,6 +556,11 @@ class WorkBot:
             # Отправляем тестовое сообщение
             await self.send_message_to_channel()
             logger.info("Тестовое сообщение отправлено")
+            
+            # Отправляем еще одно тестовое сообщение через 5 секунд
+            await asyncio.sleep(5)
+            await self.send_message_to_channel()
+            logger.info("Второе тестовое сообщение отправлено")
             
             # Держим бота активным
             while True:
