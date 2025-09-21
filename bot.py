@@ -378,47 +378,62 @@ class WorkBot:
         return text.lower()
 
     def search_churka_image(self):
-        """Ищет изображение с чурками в интернете"""
+        """Ищет изображение с таджиками и узбеками в интернете"""
         try:
-            # Список надежных URL изображений
-            image_urls = [
-                # Lorem Picsum - случайные изображения
-                "https://picsum.photos/400/400",
-                "https://picsum.photos/400/400?random=1",
-                "https://picsum.photos/400/400?random=2", 
-                "https://picsum.photos/400/400?random=3",
-                "https://picsum.photos/400/400?random=4",
-                "https://picsum.photos/400/400?random=5",
-                "https://picsum.photos/400/400?random=6",
-                "https://picsum.photos/400/400?random=7",
-                "https://picsum.photos/400/400?random=8",
-                "https://picsum.photos/400/400?random=9",
-                "https://picsum.photos/400/400?random=10",
-                # Unsplash - случайные изображения
-                "https://source.unsplash.com/400x400/?random",
-                "https://source.unsplash.com/400x400/?nature",
-                "https://source.unsplash.com/400x400/?city",
-                "https://source.unsplash.com/400x400/?people",
-                "https://source.unsplash.com/400x400/?abstract",
-                "https://source.unsplash.com/400x400/?technology",
-                "https://source.unsplash.com/400x400/?business",
-                "https://source.unsplash.com/400x400/?food",
-                "https://source.unsplash.com/400x400/?travel",
-                "https://source.unsplash.com/400x400/?animals",
-                # Другие надежные источники
-                "https://via.placeholder.com/400x400/FF6B6B/FFFFFF?text=Work",
-                "https://via.placeholder.com/400x400/4ECDC4/FFFFFF?text=Job",
-                "https://via.placeholder.com/400x400/45B7D1/FFFFFF?text=Money",
-                "https://via.placeholder.com/400x400/96CEB4/FFFFFF?text=Task",
-                "https://via.placeholder.com/400x400/FFEAA7/FFFFFF?text=Help",
-                "https://via.placeholder.com/400x400/DDA0DD/FFFFFF?text=Work",
-                "https://via.placeholder.com/400x400/98D8C8/FFFFFF?text=Job",
-                "https://via.placeholder.com/400x400/F7DC6F/FFFFFF?text=Task"
+            # Список поисковых запросов для таджиков и узбеков
+            search_queries = [
+                "tajik man",
+                "uzbek man", 
+                "tajik people",
+                "uzbek people",
+                "tajik worker",
+                "uzbek worker",
+                "tajik face",
+                "uzbek face",
+                "tajik person",
+                "uzbek person",
+                "central asian man",
+                "central asian people",
+                "tajikistan people",
+                "uzbekistan people",
+                "tajik construction worker",
+                "uzbek construction worker",
+                "tajik laborer",
+                "uzbek laborer"
             ]
             
-            # Выбираем случайное изображение
-            selected_url = random.choice(image_urls)
-            logger.info(f"Выбрано изображение: {selected_url}")
+            # Выбираем случайный запрос
+            query = random.choice(search_queries)
+            
+            # Используем Unsplash для поиска изображений
+            unsplash_url = f"https://source.unsplash.com/400x400/?{query.replace(' ', ',')}"
+            
+            # Проверяем доступность
+            try:
+                response = requests.head(unsplash_url, timeout=5)
+                if response.status_code == 200:
+                    logger.info(f"Найдено изображение с Unsplash: {unsplash_url}")
+                    return unsplash_url
+            except:
+                pass
+            
+            # Если Unsplash не работает, используем резервные URL
+            backup_urls = [
+                "https://source.unsplash.com/400x400/?man,worker",
+                "https://source.unsplash.com/400x400/?construction,worker",
+                "https://source.unsplash.com/400x400/?laborer,man",
+                "https://source.unsplash.com/400x400/?worker,face",
+                "https://source.unsplash.com/400x400/?people,construction",
+                "https://source.unsplash.com/400x400/?man,hardhat",
+                "https://source.unsplash.com/400x400/?worker,uniform",
+                "https://source.unsplash.com/400x400/?construction,site",
+                "https://source.unsplash.com/400x400/?labor,worker",
+                "https://source.unsplash.com/400x400/?man,work"
+            ]
+            
+            # Выбираем случайный резервный URL
+            selected_url = random.choice(backup_urls)
+            logger.info(f"Выбрано резервное изображение: {selected_url}")
             return selected_url
                 
         except Exception as e:
@@ -457,7 +472,7 @@ class WorkBot:
         try:
             message = self.generate_message()
             
-            # Получаем URL изображения
+            # Ищем изображение с таджиками и узбеками
             image_url = self.search_churka_image()
             
             if image_url:
