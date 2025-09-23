@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # Конфигурация бота
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8437007902:AAFXbYzoWZI7lmg4EvF3DcopKXwbzYQgpkI")
 CHANNEL_ID = os.getenv("CHANNEL_ID", "-1002722697999")  # Ваш канал
+PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY")
 
 class WorkBot:
     def __init__(self):
@@ -38,6 +39,7 @@ class WorkBot:
             connect_timeout=30
         )
         self.bot = Bot(token=BOT_TOKEN, request=request)
+        self.last_keywords = []
         
         # Базовые элементы для генерации работ (бесконечная генерация)
         self.work_verbs = [
@@ -273,6 +275,9 @@ class WorkBot:
         
         # Формируем сообщение в стиле примеров
         message = f"{work}, {price} {bonus}"
+
+        # Сохраняем ключевые слова ДО искажения текста
+        self.last_keywords = self.extract_keywords_from_work(work)
         
         # 40% шанс добавить дополнительную информацию
         if random.random() < 0.4:
@@ -286,6 +291,45 @@ class WorkBot:
         message = self.make_lowercase(message)
         
         return message
+
+    def extract_keywords_from_work(self, work: str):
+        """Выделяет 1-3 ключевых слова из исходной фразы работы (без опечаток)."""
+        try:
+            text = work.lower()
+            # Удаляем запятые/лишние символы
+            for ch in [",", ".", "!", "?", ":", ";"]:
+                text = text.replace(ch, " ")
+            tokens = [t for t in text.split() if t]
+            # Стоп-слова (минимум, чтобы не тащить лишние)
+            stop = {
+                "в", "во", "на", "над", "под", "из", "от", "до", "за", "по", "для",
+                "и", "или", "к", "с", "у", "о", "об", "про", "что", "как",
+                "дня", "утра", "вечера", "ночью", "ночь", "днем", "день", "дома"
+            }
+            # Пробуем отобрать содержательные слова: сперва объект/существительные из известного списка
+            known_objects = set(w.lower() for w in self.work_objects)
+            keywords = []
+            # Берем первое совпадение из объектов
+            for tok in tokens:
+                if tok in known_objects and tok not in keywords:
+                    keywords.append(tok)
+                    break
+            # Добавим еще одно слово (условие/глагол), если есть
+            for tok in tokens:
+                if tok not in stop and tok not in keywords and tok.isalpha():
+                    keywords.append(tok)
+                    if len(keywords) >= 3:
+                        break
+            if not keywords:
+                # Фоллбек: любые 1-2 значимых токена
+                for tok in tokens:
+                    if tok not in stop and tok.isalpha():
+                        keywords.append(tok)
+                        if len(keywords) >= 2:
+                            break
+            return keywords[:3]
+        except Exception:
+            return []
     
     def add_typos(self, text):
         """Добавляет МАКСИМАЛЬНУЮ безграмотность как у очень неграмотного человека"""
@@ -388,51 +432,50 @@ class WorkBot:
         return text.lower()
 
     def search_churka_image(self):
-        """Возвращает готовые URL изображений - только надежные источники"""
+        """Фоллбек: случайные, но надежные изображения (Picsum)."""
         try:
-            # Только Lorem Picsum - самый надежный источник
-            image_urls = [
-                "https://picsum.photos/400/400",
-                "https://picsum.photos/400/400?random=1",
-                "https://picsum.photos/400/400?random=2", 
-                "https://picsum.photos/400/400?random=3",
-                "https://picsum.photos/400/400?random=4",
-                "https://picsum.photos/400/400?random=5",
-                "https://picsum.photos/400/400?random=6",
-                "https://picsum.photos/400/400?random=7",
-                "https://picsum.photos/400/400?random=8",
-                "https://picsum.photos/400/400?random=9",
-                "https://picsum.photos/400/400?random=10",
-                "https://picsum.photos/400/400?random=11",
-                "https://picsum.photos/400/400?random=12",
-                "https://picsum.photos/400/400?random=13",
-                "https://picsum.photos/400/400?random=14",
-                "https://picsum.photos/400/400?random=15",
-                "https://picsum.photos/400/400?random=16",
-                "https://picsum.photos/400/400?random=17",
-                "https://picsum.photos/400/400?random=18",
-                "https://picsum.photos/400/400?random=19",
-                "https://picsum.photos/400/400?random=20",
-                "https://picsum.photos/400/400?random=21",
-                "https://picsum.photos/400/400?random=22",
-                "https://picsum.photos/400/400?random=23",
-                "https://picsum.photos/400/400?random=24",
-                "https://picsum.photos/400/400?random=25",
-                "https://picsum.photos/400/400?random=26",
-                "https://picsum.photos/400/400?random=27",
-                "https://picsum.photos/400/400?random=28",
-                "https://picsum.photos/400/400?random=29",
-                "https://picsum.photos/400/400?random=30"
-            ]
-            
-            # Выбираем случайное изображение
+            image_urls = [f"https://picsum.photos/400/400?random={i}" for i in range(1, 50)]
             selected_url = random.choice(image_urls)
-            logger.info(f"Выбрано изображение: {selected_url}")
+            logger.info(f"Выбрано изображение (fallback): {selected_url}")
             return selected_url
-                
         except Exception as e:
             logger.error(f"Ошибка при выборе изображения: {e}")
             return None
+
+    def fetch_pixabay_image(self, keywords):
+        """Ищет релевантное фото на Pixabay по ключевым словам (ru)."""
+        try:
+            if not PIXABAY_API_KEY:
+                return None
+            if not keywords:
+                return None
+            query = "+".join(keywords)
+            url = (
+                f"https://pixabay.com/api/?key={PIXABAY_API_KEY}"
+                f"&q={query}&image_type=photo&lang=ru&safesearch=true&per_page=10&orientation=horizontal"
+            )
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            hits = data.get("hits", [])
+            if not hits:
+                return None
+            hit = random.choice(hits)
+            # Предпочитаем средний размер
+            return hit.get("webformatURL") or hit.get("largeImageURL")
+        except Exception as e:
+            logger.warning(f"Pixabay недоступен или вернул ошибку: {e}")
+            return None
+
+    def get_image_for_message(self):
+        """Возвращает URL релевантного изображения по self.last_keywords с fallback."""
+        # Сначала пробуем Pixabay
+        url = self.fetch_pixabay_image(self.last_keywords)
+        if url:
+            logger.info(f"Выбрано изображение по ключевым словам {self.last_keywords}: {url}")
+            return url
+        # Фоллбек: Picsum
+        return self.search_churka_image()
 
     def download_image(self, image_url):
         """Скачивает изображение по URL"""
@@ -468,8 +511,8 @@ class WorkBot:
         
         for attempt in range(max_retries):
             try:
-                # Получаем URL изображения
-                image_url = self.search_churka_image()
+                # Получаем URL изображения: ассоциативный выбор с fallback
+                image_url = self.get_image_for_message()
                 
                 # Пытаемся отправить с изображением
                 try:
