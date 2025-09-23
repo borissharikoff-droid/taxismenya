@@ -295,41 +295,73 @@ class WorkBot:
         return message
 
     def extract_keywords_from_work(self, work: str):
-        """Выделяет 1-3 ключевых слова из исходной фразы работы (без опечаток)."""
+        """Выделяет ключевые слова-предметы из исходной фразы работы для ассоциативного поиска изображений."""
         try:
             text = work.lower()
             # Удаляем запятые/лишние символы
             for ch in [",", ".", "!", "?", ":", ";"]:
                 text = text.replace(ch, " ")
             tokens = [t for t in text.split() if t]
-            # Стоп-слова (минимум, чтобы не тащить лишние)
+            
+            # Стоп-слова
             stop = {
                 "в", "во", "на", "над", "под", "из", "от", "до", "за", "по", "для",
                 "и", "или", "к", "с", "у", "о", "об", "про", "что", "как",
-                "дня", "утра", "вечера", "ночью", "ночь", "днем", "день", "дома"
+                "дня", "утра", "вечера", "ночью", "ночь", "днем", "день", "дома",
+                "грязи", "пыли", "мусора", "листьев", "снега", "льда", "ржавчины"
             }
-            # Пробуем отобрать содержательные слова: сперва объект/существительные из известного списка
-            known_objects = set(w.lower() for w in self.work_objects)
+            
+            # Словарь предметов для ассоциативного поиска
+            object_keywords = {
+                # Инструменты
+                "отвертки": "screwdriver", "отвертка": "screwdriver", "ключей": "wrench", "ключи": "wrench",
+                "молоток": "hammer", "молотки": "hammer", "плоскогубцы": "pliers", "ножовку": "saw",
+                "ножовка": "saw", "дрель": "drill", "перфоратор": "drill", "болгарка": "grinder",
+                "лопату": "shovel", "лопата": "shovel", "грабли": "rake", "ведро": "bucket",
+                "швабру": "mop", "швабра": "mop", "тряпки": "rag", "тряпка": "rag",
+                
+                # Предметы мебели/интерьера
+                "скамейку": "bench", "скамейка": "bench", "лавочку": "bench", "лавочка": "bench",
+                "стул": "chair", "стулья": "chair", "кресло": "chair", "кресла": "chair",
+                "диван": "sofa", "диваны": "sofa", "кровать": "bed", "кровати": "bed",
+                "стол": "table", "столы": "table", "шкаф": "wardrobe", "шкафы": "wardrobe",
+                
+                # Строительные материалы/объекты
+                "забор": "fence", "заборчик": "fence", "ворота": "gate", "калитку": "gate",
+                "калитка": "gate", "лестницу": "stairs", "лестница": "stairs", "крышу": "roof",
+                "крыша": "roof", "стены": "wall", "стена": "wall", "полы": "floor", "пол": "floor",
+                "окна": "window", "окно": "window", "двери": "door", "дверь": "door",
+                
+                # Техника
+                "машину": "car", "машина": "car", "велосипед": "bicycle", "веласипед": "bicycle",
+                "телевизор": "tv", "компьютер": "computer", "холодильник": "refrigerator",
+                "стиральную машину": "washing machine", "посудомойку": "dishwasher",
+                
+                # Другие предметы
+                "посуду": "dishes", "посуда": "dishes", "ковры": "carpet", "ковер": "carpet",
+                "шторы": "curtains", "штора": "curtains", "люстру": "chandelier", "люстра": "chandelier",
+                "зеркала": "mirror", "зеркало": "mirror", "книги": "books", "книга": "books"
+            }
+            
             keywords = []
-            # Берем первое совпадение из объектов
+            
+            # Ищем предметы в тексте
             for tok in tokens:
-                if tok in known_objects and tok not in keywords:
-                    keywords.append(tok)
-                    break
-            # Добавим еще одно слово (условие/глагол), если есть
-            for tok in tokens:
-                if tok not in stop and tok not in keywords and tok.isalpha():
-                    keywords.append(tok)
-                    if len(keywords) >= 3:
+                if tok in object_keywords and tok not in keywords:
+                    keywords.append(object_keywords[tok])
+                    if len(keywords) >= 2:  # Максимум 2 предмета
                         break
+            
+            # Если не нашли предметы, ищем общие слова
             if not keywords:
-                # Фоллбек: любые 1-2 значимых токена
                 for tok in tokens:
-                    if tok not in stop and tok.isalpha():
+                    if tok not in stop and tok.isalpha() and len(tok) > 3:
                         keywords.append(tok)
                         if len(keywords) >= 2:
                             break
-            return keywords[:3]
+            
+            return keywords[:2]  # Возвращаем максимум 2 ключевых слова
+            
         except Exception:
             return []
     
@@ -473,24 +505,43 @@ class WorkBot:
             return None
 
     def fetch_unsplash_image(self, keywords):
-        """Ищет фото с нужными людьми на Unsplash."""
+        """Ищет ассоциативные изображения на Unsplash по предметам из текста."""
         try:
             if not UNSPLASH_API_KEY:
                 return None
             
-            # Специальные запросы для поиска изображений с нужными людьми
-            ethnic_queries = [
+            # Если есть ключевые слова-предметы, ищем их
+            if keywords:
+                for keyword in keywords:
+                    try:
+                        url = f"https://api.unsplash.com/search/photos"
+                        headers = {"Authorization": f"Client-ID {UNSPLASH_API_KEY}"}
+                        params = {
+                            "query": keyword,
+                            "per_page": 20,
+                            "orientation": "all"
+                        }
+                        resp = requests.get(url, headers=headers, params=params, timeout=10)
+                        resp.raise_for_status()
+                        data = resp.json()
+                        results = data.get("results", [])
+                        if results:
+                            result = random.choice(results)
+                            image_url = result.get("urls", {}).get("regular")
+                            if image_url:
+                                logger.info(f"Найдено ассоциативное изображение '{keyword}' на Unsplash: {image_url}")
+                                return image_url
+                    except Exception as e:
+                        logger.warning(f"Ошибка поиска '{keyword}' на Unsplash: {e}")
+                        continue
+            
+            # Фоллбек: поиск рабочих/строителей
+            fallback_queries = [
                 "construction worker", "migrant worker", "laborer", "manual worker", "dirty worker",
-                "construction man", "worker face", "laborer face", "manual labor", "dirty man",
-                "construction labor", "migrant construction", "manual construction", "worker dirty",
-                "man dirty", "construction dirty", "laborer dirty", "manual laborer", "dirty labor",
-                "migrant labor", "construction manual", "worker manual", "man manual", "dirty face",
-                "worker face dirty", "construction face", "laborer face dirty", "migrant face",
-                "manual face", "dirty construction worker", "migrant construction worker"
+                "construction man", "worker face", "laborer face", "manual labor", "dirty man"
             ]
             
-            # Пробуем разные запросы
-            for query in ethnic_queries:
+            for query in fallback_queries:
                 try:
                     url = f"https://api.unsplash.com/search/photos"
                     headers = {"Authorization": f"Client-ID {UNSPLASH_API_KEY}"}
@@ -507,7 +558,7 @@ class WorkBot:
                         result = random.choice(results)
                         image_url = result.get("urls", {}).get("regular")
                         if image_url:
-                            logger.info(f"Найдено изображение с нужным человеком по запросу '{query}': {image_url}")
+                            logger.info(f"Найдено изображение рабочего по запросу '{query}': {image_url}")
                             return image_url
                 except Exception as e:
                     logger.warning(f"Ошибка поиска по запросу '{query}': {e}")
@@ -521,24 +572,43 @@ class WorkBot:
             return None
 
     def fetch_pexels_image(self, keywords):
-        """Ищет фото с нужными людьми на Pexels."""
+        """Ищет ассоциативные изображения на Pexels по предметам из текста."""
         try:
             if not PEXELS_API_KEY:
                 return None
             
-            # Специальные запросы для поиска изображений с нужными людьми
-            ethnic_queries = [
+            # Если есть ключевые слова-предметы, ищем их
+            if keywords:
+                for keyword in keywords:
+                    try:
+                        url = f"https://api.pexels.com/v1/search"
+                        headers = {"Authorization": PEXELS_API_KEY}
+                        params = {
+                            "query": keyword,
+                            "per_page": 20,
+                            "orientation": "all"
+                        }
+                        resp = requests.get(url, headers=headers, params=params, timeout=10)
+                        resp.raise_for_status()
+                        data = resp.json()
+                        photos = data.get("photos", [])
+                        if photos:
+                            photo = random.choice(photos)
+                            image_url = photo.get("src", {}).get("medium")
+                            if image_url:
+                                logger.info(f"Найдено ассоциативное изображение '{keyword}' на Pexels: {image_url}")
+                                return image_url
+                    except Exception as e:
+                        logger.warning(f"Ошибка поиска '{keyword}' на Pexels: {e}")
+                        continue
+            
+            # Фоллбек: поиск рабочих/строителей
+            fallback_queries = [
                 "construction worker", "migrant worker", "laborer", "manual worker", "dirty worker",
-                "construction man", "worker face", "laborer face", "manual labor", "dirty man",
-                "construction labor", "migrant construction", "manual construction", "worker dirty",
-                "man dirty", "construction dirty", "laborer dirty", "manual laborer", "dirty labor",
-                "migrant labor", "construction manual", "worker manual", "man manual", "dirty face",
-                "worker face dirty", "construction face", "laborer face dirty", "migrant face",
-                "manual face", "dirty construction worker", "migrant construction worker"
+                "construction man", "worker face", "laborer face", "manual labor", "dirty man"
             ]
             
-            # Пробуем разные запросы
-            for query in ethnic_queries:
+            for query in fallback_queries:
                 try:
                     url = f"https://api.pexels.com/v1/search"
                     headers = {"Authorization": PEXELS_API_KEY}
@@ -555,7 +625,7 @@ class WorkBot:
                         photo = random.choice(photos)
                         image_url = photo.get("src", {}).get("medium")
                         if image_url:
-                            logger.info(f"Найдено изображение с нужным человеком по запросу '{query}': {image_url}")
+                            logger.info(f"Найдено изображение рабочего по запросу '{query}': {image_url}")
                             return image_url
                 except Exception as e:
                     logger.warning(f"Ошибка поиска по запросу '{query}': {e}")
@@ -569,24 +639,42 @@ class WorkBot:
             return None
 
     def fetch_pixabay_image(self, keywords):
-        """Ищет фото с дагестанцами, таджиками и подобными на Pixabay."""
+        """Ищет ассоциативные изображения на Pixabay по предметам из текста."""
         try:
             if not PIXABAY_API_KEY:
                 return None
             
-            # Специальные запросы для поиска изображений с нужными людьми
-            ethnic_queries = [
+            # Если есть ключевые слова-предметы, ищем их
+            if keywords:
+                for keyword in keywords:
+                    try:
+                        # Заменяем пробелы на + для Pixabay
+                        query = keyword.replace(" ", "+")
+                        url = (
+                            f"https://pixabay.com/api/?key={PIXABAY_API_KEY}"
+                            f"&q={query}&image_type=photo&lang=en&safesearch=true&per_page=20&orientation=all"
+                        )
+                        resp = requests.get(url, timeout=10)
+                        resp.raise_for_status()
+                        data = resp.json()
+                        hits = data.get("hits", [])
+                        if hits:
+                            hit = random.choice(hits)
+                            image_url = hit.get("webformatURL") or hit.get("largeImageURL")
+                            if image_url:
+                                logger.info(f"Найдено ассоциативное изображение '{keyword}' на Pixabay: {image_url}")
+                                return image_url
+                    except Exception as e:
+                        logger.warning(f"Ошибка поиска '{keyword}' на Pixabay: {e}")
+                        continue
+            
+            # Фоллбек: поиск рабочих/строителей
+            fallback_queries = [
                 "dirty+worker", "construction+worker", "migrant+worker", "laborer", "manual+worker",
-                "dirty+man", "construction+man", "worker+face", "laborer+face", "manual+labor",
-                "dirty+construction", "migrant+construction", "construction+labor", "manual+construction",
-                "worker+dirty", "man+dirty", "construction+dirty", "laborer+dirty", "manual+laborer",
-                "dirty+labor", "migrant+labor", "construction+manual", "worker+manual", "man+manual",
-                "dirty+face", "worker+face+dirty", "construction+face", "laborer+face+dirty",
-                "migrant+face", "manual+face", "dirty+construction+worker", "migrant+construction+worker"
+                "dirty+man", "construction+man", "worker+face", "laborer+face", "manual+labor"
             ]
             
-            # Пробуем разные запросы
-            for query in ethnic_queries:
+            for query in fallback_queries:
                 try:
                     url = (
                         f"https://pixabay.com/api/?key={PIXABAY_API_KEY}"
@@ -600,13 +688,13 @@ class WorkBot:
                         hit = random.choice(hits)
                         image_url = hit.get("webformatURL") or hit.get("largeImageURL")
                         if image_url:
-                            logger.info(f"Найдено изображение с дагестанцем/таджиком по запросу '{query}': {image_url}")
+                            logger.info(f"Найдено изображение рабочего по запросу '{query}': {image_url}")
                             return image_url
                 except Exception as e:
                     logger.warning(f"Ошибка поиска по запросу '{query}': {e}")
                     continue
             
-            logger.warning("Не найдено подходящих изображений с дагестанцами/таджиками")
+            logger.warning("Не найдено подходящих изображений на Pixabay")
             return None
             
         except Exception as e:
@@ -614,25 +702,25 @@ class WorkBot:
             return None
 
     def get_image_for_message(self):
-        """Возвращает URL изображения с дагестанцами, таджиками и подобными."""
-        # Пробуем разные источники по очереди
+        """Возвращает URL ассоциативного изображения по предметам из текста."""
+        # Пробуем разные источники по очереди для поиска ассоциативных изображений
         
-        # 1. Unsplash (лучший источник для портретов)
+        # 1. Unsplash (лучший источник для ассоциативных изображений)
         url = self.fetch_unsplash_image(self.last_keywords)
         if url:
-            logger.info(f"Найдено изображение на Unsplash по ключевым словам {self.last_keywords}: {url}")
+            logger.info(f"Найдено ассоциативное изображение на Unsplash по ключевым словам {self.last_keywords}: {url}")
             return url
         
         # 2. Pexels (хороший источник)
         url = self.fetch_pexels_image(self.last_keywords)
         if url:
-            logger.info(f"Найдено изображение на Pexels по ключевым словам {self.last_keywords}: {url}")
+            logger.info(f"Найдено ассоциативное изображение на Pexels по ключевым словам {self.last_keywords}: {url}")
             return url
         
         # 3. Pixabay (резерв)
         url = self.fetch_pixabay_image(self.last_keywords)
         if url:
-            logger.info(f"Найдено изображение на Pixabay по ключевым словам {self.last_keywords}: {url}")
+            logger.info(f"Найдено ассоциативное изображение на Pixabay по ключевым словам {self.last_keywords}: {url}")
             return url
         
         # 4. Фоллбек: всегда изображения с дагестанцами/таджиками
