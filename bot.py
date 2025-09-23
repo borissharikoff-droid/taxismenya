@@ -432,63 +432,62 @@ class WorkBot:
         return text.lower()
 
     def search_churka_image(self):
-        """Фоллбек: изображения с таджиками/узбеками из готовых URL."""
+        """Фоллбек: изображения с хачами в масках."""
         try:
-            # Готовые URL изображений с таджиками/узбеками/хачами
-            central_asian_image_urls = [
-                # Unsplash - бесплатные изображения
-                "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face",
-                "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=crop&crop=face",
-                "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=face",
-                "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=400&fit=crop&crop=face",
-                "https://images.unsplash.com/photo-1519345182560-3f2917c472ef?w=400&h=400&fit=crop&crop=face",
-                "https://images.unsplash.com/photo-1507591064344-4c6ce005b128?w=400&h=400&fit=crop&crop=face",
-                "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face",
-                "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=crop&crop=face",
-                "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=face",
-                "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=400&fit=crop&crop=face",
-                "https://images.unsplash.com/photo-1519345182560-3f2917c472ef?w=400&h=400&fit=crop&crop=face",
-                "https://images.unsplash.com/photo-1507591064344-4c6ce005b128?w=400&h=400&fit=crop&crop=face",
+            # Готовые URL изображений с людьми в масках
+            masked_people_urls = [
+                # Unsplash - люди в масках
+                "https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1609220136736-443140cffec6?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1612198188060-c7c2a3b66eae?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1612198188060-c7c2a3b66eae?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1609220136736-443140cffec6?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1612198188060-c7c2a3b66eae?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1609220136736-443140cffec6?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1612198188060-c7c2a3b66eae?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1609220136736-443140cffec6?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=400&h=400&fit=crop&crop=face",
                 # Picsum с фиксированными ID для стабильности
-                "https://picsum.photos/400/400?random=100",
-                "https://picsum.photos/400/400?random=101", 
-                "https://picsum.photos/400/400?random=102",
-                "https://picsum.photos/400/400?random=103",
-                "https://picsum.photos/400/400?random=104",
-                "https://picsum.photos/400/400?random=105",
-                "https://picsum.photos/400/400?random=106",
-                "https://picsum.photos/400/400?random=107",
-                "https://picsum.photos/400/400?random=108",
-                "https://picsum.photos/400/400?random=109",
-                "https://picsum.photos/400/400?random=110"
+                "https://picsum.photos/400/400?random=200",
+                "https://picsum.photos/400/400?random=201", 
+                "https://picsum.photos/400/400?random=202",
+                "https://picsum.photos/400/400?random=203",
+                "https://picsum.photos/400/400?random=204",
+                "https://picsum.photos/400/400?random=205",
+                "https://picsum.photos/400/400?random=206",
+                "https://picsum.photos/400/400?random=207",
+                "https://picsum.photos/400/400?random=208",
+                "https://picsum.photos/400/400?random=209",
+                "https://picsum.photos/400/400?random=210"
             ]
             
-            selected_url = random.choice(central_asian_image_urls)
-            logger.info(f"Выбрано изображение (fallback с таджиком/узбеком): {selected_url}")
+            selected_url = random.choice(masked_people_urls)
+            logger.info(f"Выбрано изображение (fallback с хачом в маске): {selected_url}")
             return selected_url
         except Exception as e:
             logger.error(f"Ошибка при выборе изображения: {e}")
             return None
 
     def fetch_pixabay_image(self, keywords):
-        """Ищет фото с таджиками/узбеками/хачами на Pixabay."""
+        """Ищет фото с людьми в масках на Pixabay."""
         try:
             if not PIXABAY_API_KEY:
                 return None
             
-            # Специальные запросы для поиска изображений с таджиками/узбеками/хачами
-            central_asian_queries = [
-                "tajik+worker", "uzbek+worker", "central+asian+man", "tajik+man", "uzbek+man",
-                "migrant+worker", "construction+worker", "laborer", "tajik+construction", 
-                "uzbek+construction", "central+asian+construction", "tajik+labor", "uzbek+labor",
-                "migrant+labor", "tajik+worker+construction", "uzbek+worker+construction",
-                "central+asian+worker", "tajik+man+work", "uzbek+man+work", "migrant+man",
-                "tajik+person", "uzbek+person", "central+asian+person", "tajik+people",
-                "uzbek+people", "central+asian+people", "tajik+team", "uzbek+team"
+            # Специальные запросы для поиска изображений с людьми в масках
+            masked_queries = [
+                "person+mask", "man+mask", "worker+mask", "construction+mask", "laborer+mask",
+                "masked+person", "masked+worker", "masked+man", "face+mask", "surgical+mask",
+                "construction+worker+mask", "worker+face+mask", "man+face+mask", "person+face+mask",
+                "masked+construction", "masked+labor", "masked+worker+construction", "masked+person+work",
+                "safety+mask", "protective+mask", "mask+construction", "mask+worker", "mask+labor",
+                "face+cover", "face+protection", "masked+face", "person+protection", "worker+protection"
             ]
             
             # Пробуем разные запросы
-            for query in central_asian_queries:
+            for query in masked_queries:
                 try:
                     url = (
                         f"https://pixabay.com/api/?key={PIXABAY_API_KEY}"
@@ -502,13 +501,13 @@ class WorkBot:
                         hit = random.choice(hits)
                         image_url = hit.get("webformatURL") or hit.get("largeImageURL")
                         if image_url:
-                            logger.info(f"Найдено изображение с таджиком/узбеком по запросу '{query}': {image_url}")
+                            logger.info(f"Найдено изображение с человеком в маске по запросу '{query}': {image_url}")
                             return image_url
                 except Exception as e:
                     logger.warning(f"Ошибка поиска по запросу '{query}': {e}")
                     continue
             
-            logger.warning("Не найдено подходящих изображений с таджиками/узбеками")
+            logger.warning("Не найдено подходящих изображений с людьми в масках")
             return None
             
         except Exception as e:
@@ -516,17 +515,17 @@ class WorkBot:
             return None
 
     def get_image_for_message(self):
-        """Возвращает URL изображения с таджиками/узбеками/хачами."""
-        # Сначала пробуем Pixabay для поиска релевантных изображений с таджиками/узбеками
+        """Возвращает URL изображения с хачами в масках."""
+        # Сначала пробуем Pixabay для поиска изображений с людьми в масках
         url = self.fetch_pixabay_image(self.last_keywords)
         if url:
-            logger.info(f"Найдено релевантное изображение с таджиком/узбеком по ключевым словам {self.last_keywords}: {url}")
+            logger.info(f"Найдено изображение с человеком в маске по ключевым словам {self.last_keywords}: {url}")
             return url
         
-        # Фоллбек: всегда изображения с таджиками/узбеками
+        # Фоллбек: всегда изображения с хачами в масках
         fallback_url = self.search_churka_image()
         if fallback_url:
-            logger.info(f"Используется fallback изображение с таджиком/узбеком: {fallback_url}")
+            logger.info(f"Используется fallback изображение с хачом в маске: {fallback_url}")
             return fallback_url
         
         # Последний резерв - случайное изображение
