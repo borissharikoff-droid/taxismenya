@@ -7,12 +7,14 @@ import tempfile
 from datetime import datetime, timedelta
 from telegram import Bot, InputMediaPhoto
 from telegram.error import TelegramError
+from telegram.request import HTTPXRequest
 import schedule
 import time
 from threading import Thread
 from bs4 import BeautifulSoup
 from PIL import Image
 import io
+import httpx
 
 # Настройка логирования
 logging.basicConfig(
@@ -27,7 +29,15 @@ CHANNEL_ID = os.getenv("CHANNEL_ID", "-1002722697999")  # Ваш канал
 
 class WorkBot:
     def __init__(self):
-        self.bot = Bot(token=BOT_TOKEN)
+        # Настройка HTTP клиента с увеличенными лимитами
+        request = HTTPXRequest(
+            connection_pool_size=20,
+            pool_timeout=30,
+            read_timeout=30,
+            write_timeout=30,
+            connect_timeout=30
+        )
+        self.bot = Bot(token=BOT_TOKEN, request=request)
         
         # Базовые элементы для генерации работ (бесконечная генерация)
         self.work_verbs = [
@@ -378,11 +388,10 @@ class WorkBot:
         return text.lower()
 
     def search_churka_image(self):
-        """Возвращает готовые URL изображений с таджиками и узбеками"""
+        """Возвращает готовые URL изображений - только надежные источники"""
         try:
-            # Список готовых URL изображений - ГАРАНТИРОВАННО РАБОТАЮЩИХ
+            # Только Lorem Picsum - самый надежный источник
             image_urls = [
-                # Lorem Picsum - случайные изображения (всегда работают)
                 "https://picsum.photos/400/400",
                 "https://picsum.photos/400/400?random=1",
                 "https://picsum.photos/400/400?random=2", 
@@ -404,17 +413,16 @@ class WorkBot:
                 "https://picsum.photos/400/400?random=18",
                 "https://picsum.photos/400/400?random=19",
                 "https://picsum.photos/400/400?random=20",
-                # Placeholder изображения с текстом
-                "https://via.placeholder.com/400x400/FF6B6B/FFFFFF?text=Work",
-                "https://via.placeholder.com/400x400/4ECDC4/FFFFFF?text=Job",
-                "https://via.placeholder.com/400x400/45B7D1/FFFFFF?text=Money",
-                "https://via.placeholder.com/400x400/96CEB4/FFFFFF?text=Task",
-                "https://via.placeholder.com/400x400/FFEAA7/FFFFFF?text=Help",
-                "https://via.placeholder.com/400x400/DDA0DD/FFFFFF?text=Work",
-                "https://via.placeholder.com/400x400/98D8C8/FFFFFF?text=Job",
-                "https://via.placeholder.com/400x400/F7DC6F/FFFFFF?text=Task",
-                "https://via.placeholder.com/400x400/FF9FF3/FFFFFF?text=Labor",
-                "https://via.placeholder.com/400x400/54A0FF/FFFFFF?text=Worker"
+                "https://picsum.photos/400/400?random=21",
+                "https://picsum.photos/400/400?random=22",
+                "https://picsum.photos/400/400?random=23",
+                "https://picsum.photos/400/400?random=24",
+                "https://picsum.photos/400/400?random=25",
+                "https://picsum.photos/400/400?random=26",
+                "https://picsum.photos/400/400?random=27",
+                "https://picsum.photos/400/400?random=28",
+                "https://picsum.photos/400/400?random=29",
+                "https://picsum.photos/400/400?random=30"
             ]
             
             # Выбираем случайное изображение
@@ -454,63 +462,87 @@ class WorkBot:
             return None
 
     async def send_message_to_channel(self):
-        """Отправляет сообщение с изображением в канал"""
-        try:
-            message = self.generate_message()
-            
-            # Получаем URL изображения
-            image_url = self.search_churka_image()
-            
-            # ВСЕГДА пытаемся отправить с изображением
+        """Отправляет сообщение с изображением в канал с повторными попытками"""
+        message = self.generate_message()
+        max_retries = 3
+        
+        for attempt in range(max_retries):
             try:
-                await self.bot.send_photo(
-                    chat_id=CHANNEL_ID,
-                    photo=image_url,
-                    caption=message
-                )
-                logger.info(f"✅ Сообщение с изображением отправлено: {message}")
-                return
+                # Получаем URL изображения
+                image_url = self.search_churka_image()
                 
+                # Пытаемся отправить с изображением
+                try:
+                    await self.bot.send_photo(
+                        chat_id=CHANNEL_ID,
+                        photo=image_url,
+                        caption=message
+                    )
+                    logger.info(f"✅ Сообщение с изображением отправлено: {message}")
+                    return
+                    
+                except Exception as e:
+                    logger.warning(f"⚠️ Ошибка при отправке фото (попытка {attempt + 1}): {e}")
+                    # Если не получилось с фото, отправляем только текст
+                    await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
+                    logger.info(f"📝 Сообщение без изображения отправлено: {message}")
+                    return
+                    
             except Exception as e:
-                logger.error(f"❌ Ошибка при отправке фото: {e}")
-                # Если не получилось с фото, отправляем только текст
-                await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
-                logger.info(f"📝 Сообщение без изображения отправлено: {message}")
-                
-        except Exception as e:
-            logger.error(f"❌ Критическая ошибка: {e}")
-            # В крайнем случае пытаемся отправить хотя бы текст
-            try:
-                message = self.generate_message()
-                await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
-                logger.info(f"🆘 Резервное сообщение отправлено: {message}")
-            except:
-                logger.error("💀 Не удалось отправить даже резервное сообщение")
+                logger.error(f"❌ Ошибка отправки (попытка {attempt + 1}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)  # Экспоненциальная задержка
+                else:
+                    logger.error(f"💀 Не удалось отправить сообщение после {max_retries} попыток: {message}")
+                    # Последняя попытка - только текст
+                    try:
+                        await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
+                        logger.info(f"🆘 Резервное сообщение отправлено: {message}")
+                    except Exception as final_e:
+                        logger.error(f"💀 Финальная ошибка: {final_e}")
 
     def send_message_sync(self):
         """Синхронная обертка для отправки сообщения"""
-        asyncio.run(self.send_message_to_channel())
+        try:
+            # Создаем новый event loop для каждого вызова
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(self.send_message_to_channel())
+            finally:
+                loop.close()
+        except Exception as e:
+            logger.error(f"❌ Ошибка в send_message_sync: {e}")
+            # Попытка с новым loop
+            try:
+                asyncio.run(self.send_message_to_channel())
+            except Exception as e2:
+                logger.error(f"❌ Критическая ошибка в send_message_sync: {e2}")
 
     def schedule_messages(self):
-        """Планирует отправку сообщений 8 раз в день"""
-        # 8:00 утра
-        schedule.every().day.at("08:00").do(self.send_message_sync)
-        # 10:00 утра
-        schedule.every().day.at("10:00").do(self.send_message_sync)
-        # 12:00 дня
-        schedule.every().day.at("12:00").do(self.send_message_sync)
-        # 14:00 дня  
-        schedule.every().day.at("14:00").do(self.send_message_sync)
-        # 16:00 дня
-        schedule.every().day.at("16:00").do(self.send_message_sync)
-        # 18:00 вечера
-        schedule.every().day.at("18:00").do(self.send_message_sync)
-        # 20:00 вечера
-        schedule.every().day.at("20:00").do(self.send_message_sync)
-        # 22:00 вечера
-        schedule.every().day.at("22:00").do(self.send_message_sync)
+        """Планирует отправку сообщений 10 раз в день"""
+        # 7:00 утра
+        schedule.every().day.at("07:00").do(self.send_message_sync)
+        # 9:00 утра
+        schedule.every().day.at("09:00").do(self.send_message_sync)
+        # 11:00 утра
+        schedule.every().day.at("11:00").do(self.send_message_sync)
+        # 13:00 дня
+        schedule.every().day.at("13:00").do(self.send_message_sync)
+        # 15:00 дня
+        schedule.every().day.at("15:00").do(self.send_message_sync)
+        # 17:00 дня
+        schedule.every().day.at("17:00").do(self.send_message_sync)
+        # 19:00 вечера
+        schedule.every().day.at("19:00").do(self.send_message_sync)
+        # 21:00 вечера
+        schedule.every().day.at("21:00").do(self.send_message_sync)
+        # 23:00 вечера
+        schedule.every().day.at("23:00").do(self.send_message_sync)
+        # 1:00 ночи
+        schedule.every().day.at("01:00").do(self.send_message_sync)
         
-        logger.info("Расписание сообщений настроено: 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00")
+        logger.info("Расписание сообщений настроено: 07:00, 09:00, 11:00, 13:00, 15:00, 17:00, 19:00, 21:00, 23:00, 01:00")
 
     def run_scheduler(self):
         """Запускает планировщик в отдельном потоке"""
@@ -532,21 +564,32 @@ class WorkBot:
             scheduler_thread = Thread(target=self.run_scheduler, daemon=True)
             scheduler_thread.start()
             
-            logger.info("Бот готов к работе! Сообщения будут отправляться в 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00")
+            logger.info("Бот готов к работе! Сообщения будут отправляться в 07:00, 09:00, 11:00, 13:00, 15:00, 17:00, 19:00, 21:00, 23:00, 01:00")
             
             # Отправляем несколько тестовых сообщений для проверки
             logger.info("🚀 Отправляем тестовые сообщения...")
             
-            await self.send_message_to_channel()
-            logger.info("✅ Тестовое сообщение 1 отправлено")
+            try:
+                await self.send_message_to_channel()
+                logger.info("✅ Тестовое сообщение 1 отправлено")
+            except Exception as e:
+                logger.error(f"❌ Ошибка тестового сообщения 1: {e}")
             
-            await asyncio.sleep(3)
-            await self.send_message_to_channel()
-            logger.info("✅ Тестовое сообщение 2 отправлено")
+            await asyncio.sleep(5)
             
-            await asyncio.sleep(3)
-            await self.send_message_to_channel()
-            logger.info("✅ Тестовое сообщение 3 отправлено")
+            try:
+                await self.send_message_to_channel()
+                logger.info("✅ Тестовое сообщение 2 отправлено")
+            except Exception as e:
+                logger.error(f"❌ Ошибка тестового сообщения 2: {e}")
+            
+            await asyncio.sleep(5)
+            
+            try:
+                await self.send_message_to_channel()
+                logger.info("✅ Тестовое сообщение 3 отправлено")
+            except Exception as e:
+                logger.error(f"❌ Ошибка тестового сообщения 3: {e}")
             
             # Держим бота активным
             while True:
@@ -554,6 +597,7 @@ class WorkBot:
                 
         except Exception as e:
             logger.error(f"Ошибка при запуске бота: {e}")
+            raise
 
 def main():
     """Главная функция"""
