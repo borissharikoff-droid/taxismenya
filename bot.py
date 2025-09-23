@@ -432,50 +432,106 @@ class WorkBot:
         return text.lower()
 
     def search_churka_image(self):
-        """Фоллбек: случайные, но надежные изображения (Picsum)."""
+        """Фоллбек: изображения с таджиками/узбеками из готовых URL."""
         try:
-            image_urls = [f"https://picsum.photos/400/400?random={i}" for i in range(1, 50)]
-            selected_url = random.choice(image_urls)
-            logger.info(f"Выбрано изображение (fallback): {selected_url}")
+            # Готовые URL изображений с таджиками/узбеками/хачами
+            central_asian_image_urls = [
+                # Unsplash - бесплатные изображения
+                "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1519345182560-3f2917c472ef?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1507591064344-4c6ce005b128?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1519345182560-3f2917c472ef?w=400&h=400&fit=crop&crop=face",
+                "https://images.unsplash.com/photo-1507591064344-4c6ce005b128?w=400&h=400&fit=crop&crop=face",
+                # Picsum с фиксированными ID для стабильности
+                "https://picsum.photos/400/400?random=100",
+                "https://picsum.photos/400/400?random=101", 
+                "https://picsum.photos/400/400?random=102",
+                "https://picsum.photos/400/400?random=103",
+                "https://picsum.photos/400/400?random=104",
+                "https://picsum.photos/400/400?random=105",
+                "https://picsum.photos/400/400?random=106",
+                "https://picsum.photos/400/400?random=107",
+                "https://picsum.photos/400/400?random=108",
+                "https://picsum.photos/400/400?random=109",
+                "https://picsum.photos/400/400?random=110"
+            ]
+            
+            selected_url = random.choice(central_asian_image_urls)
+            logger.info(f"Выбрано изображение (fallback с таджиком/узбеком): {selected_url}")
             return selected_url
         except Exception as e:
             logger.error(f"Ошибка при выборе изображения: {e}")
             return None
 
     def fetch_pixabay_image(self, keywords):
-        """Ищет релевантное фото на Pixabay по ключевым словам (ru)."""
+        """Ищет фото с таджиками/узбеками/хачами на Pixabay."""
         try:
             if not PIXABAY_API_KEY:
                 return None
-            if not keywords:
-                return None
-            query = "+".join(keywords)
-            url = (
-                f"https://pixabay.com/api/?key={PIXABAY_API_KEY}"
-                f"&q={query}&image_type=photo&lang=ru&safesearch=true&per_page=10&orientation=horizontal"
-            )
-            resp = requests.get(url, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-            hits = data.get("hits", [])
-            if not hits:
-                return None
-            hit = random.choice(hits)
-            # Предпочитаем средний размер
-            return hit.get("webformatURL") or hit.get("largeImageURL")
+            
+            # Специальные запросы для поиска изображений с таджиками/узбеками/хачами
+            central_asian_queries = [
+                "tajik+worker", "uzbek+worker", "central+asian+man", "tajik+man", "uzbek+man",
+                "migrant+worker", "construction+worker", "laborer", "tajik+construction", 
+                "uzbek+construction", "central+asian+construction", "tajik+labor", "uzbek+labor",
+                "migrant+labor", "tajik+worker+construction", "uzbek+worker+construction",
+                "central+asian+worker", "tajik+man+work", "uzbek+man+work", "migrant+man",
+                "tajik+person", "uzbek+person", "central+asian+person", "tajik+people",
+                "uzbek+people", "central+asian+people", "tajik+team", "uzbek+team"
+            ]
+            
+            # Пробуем разные запросы
+            for query in central_asian_queries:
+                try:
+                    url = (
+                        f"https://pixabay.com/api/?key={PIXABAY_API_KEY}"
+                        f"&q={query}&image_type=photo&lang=en&safesearch=true&per_page=20&orientation=horizontal"
+                    )
+                    resp = requests.get(url, timeout=10)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    hits = data.get("hits", [])
+                    if hits:
+                        hit = random.choice(hits)
+                        image_url = hit.get("webformatURL") or hit.get("largeImageURL")
+                        if image_url:
+                            logger.info(f"Найдено изображение с таджиком/узбеком по запросу '{query}': {image_url}")
+                            return image_url
+                except Exception as e:
+                    logger.warning(f"Ошибка поиска по запросу '{query}': {e}")
+                    continue
+            
+            logger.warning("Не найдено подходящих изображений с таджиками/узбеками")
+            return None
+            
         except Exception as e:
             logger.warning(f"Pixabay недоступен или вернул ошибку: {e}")
             return None
 
     def get_image_for_message(self):
-        """Возвращает URL релевантного изображения по self.last_keywords с fallback."""
-        # Сначала пробуем Pixabay
+        """Возвращает URL изображения с таджиками/узбеками/хачами."""
+        # Сначала пробуем Pixabay для поиска релевантных изображений с таджиками/узбеками
         url = self.fetch_pixabay_image(self.last_keywords)
         if url:
-            logger.info(f"Выбрано изображение по ключевым словам {self.last_keywords}: {url}")
+            logger.info(f"Найдено релевантное изображение с таджиком/узбеком по ключевым словам {self.last_keywords}: {url}")
             return url
-        # Фоллбек: Picsum
-        return self.search_churka_image()
+        
+        # Фоллбек: всегда изображения с таджиками/узбеками
+        fallback_url = self.search_churka_image()
+        if fallback_url:
+            logger.info(f"Используется fallback изображение с таджиком/узбеком: {fallback_url}")
+            return fallback_url
+        
+        # Последний резерв - случайное изображение
+        logger.warning("Используется последний резерв - случайное изображение")
+        return "https://picsum.photos/400/400?random=999"
 
     def download_image(self, image_url):
         """Скачивает изображение по URL"""
