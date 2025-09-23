@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8437007902:AAFXbYzoWZI7lmg4EvF3DcopKXwbzYQgpkI")
 CHANNEL_ID = os.getenv("CHANNEL_ID", "-1002722697999")  # Ваш канал
 PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY")
+UNSPLASH_API_KEY = os.getenv("UNSPLASH_API_KEY")
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
 
 class WorkBot:
     def __init__(self):
@@ -470,6 +472,102 @@ class WorkBot:
             logger.error(f"Ошибка при выборе изображения: {e}")
             return None
 
+    def fetch_unsplash_image(self, keywords):
+        """Ищет фото с нужными людьми на Unsplash."""
+        try:
+            if not UNSPLASH_API_KEY:
+                return None
+            
+            # Специальные запросы для поиска изображений с нужными людьми
+            ethnic_queries = [
+                "construction worker", "migrant worker", "laborer", "manual worker", "dirty worker",
+                "construction man", "worker face", "laborer face", "manual labor", "dirty man",
+                "construction labor", "migrant construction", "manual construction", "worker dirty",
+                "man dirty", "construction dirty", "laborer dirty", "manual laborer", "dirty labor",
+                "migrant labor", "construction manual", "worker manual", "man manual", "dirty face",
+                "worker face dirty", "construction face", "laborer face dirty", "migrant face",
+                "manual face", "dirty construction worker", "migrant construction worker"
+            ]
+            
+            # Пробуем разные запросы
+            for query in ethnic_queries:
+                try:
+                    url = f"https://api.unsplash.com/search/photos"
+                    headers = {"Authorization": f"Client-ID {UNSPLASH_API_KEY}"}
+                    params = {
+                        "query": query,
+                        "per_page": 20,
+                        "orientation": "portrait"
+                    }
+                    resp = requests.get(url, headers=headers, params=params, timeout=10)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    results = data.get("results", [])
+                    if results:
+                        result = random.choice(results)
+                        image_url = result.get("urls", {}).get("regular")
+                        if image_url:
+                            logger.info(f"Найдено изображение с нужным человеком по запросу '{query}': {image_url}")
+                            return image_url
+                except Exception as e:
+                    logger.warning(f"Ошибка поиска по запросу '{query}': {e}")
+                    continue
+            
+            logger.warning("Не найдено подходящих изображений на Unsplash")
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Unsplash недоступен или вернул ошибку: {e}")
+            return None
+
+    def fetch_pexels_image(self, keywords):
+        """Ищет фото с нужными людьми на Pexels."""
+        try:
+            if not PEXELS_API_KEY:
+                return None
+            
+            # Специальные запросы для поиска изображений с нужными людьми
+            ethnic_queries = [
+                "construction worker", "migrant worker", "laborer", "manual worker", "dirty worker",
+                "construction man", "worker face", "laborer face", "manual labor", "dirty man",
+                "construction labor", "migrant construction", "manual construction", "worker dirty",
+                "man dirty", "construction dirty", "laborer dirty", "manual laborer", "dirty labor",
+                "migrant labor", "construction manual", "worker manual", "man manual", "dirty face",
+                "worker face dirty", "construction face", "laborer face dirty", "migrant face",
+                "manual face", "dirty construction worker", "migrant construction worker"
+            ]
+            
+            # Пробуем разные запросы
+            for query in ethnic_queries:
+                try:
+                    url = f"https://api.pexels.com/v1/search"
+                    headers = {"Authorization": PEXELS_API_KEY}
+                    params = {
+                        "query": query,
+                        "per_page": 20,
+                        "orientation": "portrait"
+                    }
+                    resp = requests.get(url, headers=headers, params=params, timeout=10)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    photos = data.get("photos", [])
+                    if photos:
+                        photo = random.choice(photos)
+                        image_url = photo.get("src", {}).get("medium")
+                        if image_url:
+                            logger.info(f"Найдено изображение с нужным человеком по запросу '{query}': {image_url}")
+                            return image_url
+                except Exception as e:
+                    logger.warning(f"Ошибка поиска по запросу '{query}': {e}")
+                    continue
+            
+            logger.warning("Не найдено подходящих изображений на Pexels")
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Pexels недоступен или вернул ошибку: {e}")
+            return None
+
     def fetch_pixabay_image(self, keywords):
         """Ищет фото с дагестанцами, таджиками и подобными на Pixabay."""
         try:
@@ -517,19 +615,33 @@ class WorkBot:
 
     def get_image_for_message(self):
         """Возвращает URL изображения с дагестанцами, таджиками и подобными."""
-        # Сначала пробуем Pixabay для поиска изображений с нужными людьми
-        url = self.fetch_pixabay_image(self.last_keywords)
+        # Пробуем разные источники по очереди
+        
+        # 1. Unsplash (лучший источник для портретов)
+        url = self.fetch_unsplash_image(self.last_keywords)
         if url:
-            logger.info(f"Найдено изображение с дагестанцем/таджиком по ключевым словам {self.last_keywords}: {url}")
+            logger.info(f"Найдено изображение на Unsplash по ключевым словам {self.last_keywords}: {url}")
             return url
         
-        # Фоллбек: всегда изображения с дагестанцами/таджиками
+        # 2. Pexels (хороший источник)
+        url = self.fetch_pexels_image(self.last_keywords)
+        if url:
+            logger.info(f"Найдено изображение на Pexels по ключевым словам {self.last_keywords}: {url}")
+            return url
+        
+        # 3. Pixabay (резерв)
+        url = self.fetch_pixabay_image(self.last_keywords)
+        if url:
+            logger.info(f"Найдено изображение на Pixabay по ключевым словам {self.last_keywords}: {url}")
+            return url
+        
+        # 4. Фоллбек: всегда изображения с дагестанцами/таджиками
         fallback_url = self.search_churka_image()
         if fallback_url:
             logger.info(f"Используется fallback изображение с дагестанцем/таджиком: {fallback_url}")
             return fallback_url
         
-        # Последний резерв - случайное изображение
+        # 5. Последний резерв - случайное изображение
         logger.warning("Используется последний резерв - случайное изображение")
         return "https://picsum.photos/400/400?random=999"
 
