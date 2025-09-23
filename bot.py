@@ -761,31 +761,16 @@ class WorkBot:
             return None
 
     async def send_message_to_channel(self):
-        """Отправляет сообщение с изображением в канал с повторными попытками"""
+        """Отправляет только текстовое сообщение в канал с повторными попытками"""
         message = self.generate_message()
         max_retries = 3
         
         for attempt in range(max_retries):
             try:
-                # Получаем URL изображения: ассоциативный выбор с fallback
-                image_url = self.get_image_for_message()
-                
-                # Пытаемся отправить с изображением
-                try:
-                    await self.bot.send_photo(
-                        chat_id=CHANNEL_ID,
-                        photo=image_url,
-                        caption=message
-                    )
-                    logger.info(f"✅ Сообщение с изображением отправлено: {message}")
-                    return
-                    
-                except Exception as e:
-                    logger.warning(f"⚠️ Ошибка при отправке фото (попытка {attempt + 1}): {e}")
-                    # Если не получилось с фото, отправляем только текст
-                    await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
-                    logger.info(f"📝 Сообщение без изображения отправлено: {message}")
-                    return
+                # Отправляем только текст
+                await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
+                logger.info(f"✅ Текстовое сообщение отправлено: {message}")
+                return
                     
             except Exception as e:
                 logger.error(f"❌ Ошибка отправки (попытка {attempt + 1}): {e}")
@@ -793,7 +778,7 @@ class WorkBot:
                     await asyncio.sleep(2 ** attempt)  # Экспоненциальная задержка
                 else:
                     logger.error(f"💀 Не удалось отправить сообщение после {max_retries} попыток: {message}")
-                    # Последняя попытка - только текст
+                    # Последняя попытка
                     try:
                         await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
                         logger.info(f"🆘 Резервное сообщение отправлено: {message}")
