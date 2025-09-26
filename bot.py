@@ -17,6 +17,9 @@ import io
 import httpx
 import signal
 import sys
+from gtts import gTTS
+from pydub import AudioSegment
+import re
 
 # Настройка логирования
 logging.basicConfig(
@@ -45,6 +48,7 @@ class WorkBot:
         )
         self.bot = Bot(token=BOT_TOKEN, request=request)
         self.last_keywords = []
+        self.voice_message_count = 0  # Счетчик голосовых сообщений
         
         # Базовые элементы для генерации работ (бесконечная генерация)
         self.work_verbs = [
@@ -468,6 +472,82 @@ class WorkBot:
         """Делает весь текст с маленькой буквы"""
         return text.lower()
 
+    def convert_to_dagestani_accent(self, text):
+        """Конвертирует текст в дагестанский акцент с ломаным русским"""
+        # Словарь замен для дагестанского акцента
+        dagestani_replacements = {
+            # Звуковые замены
+            "ч": "ш", "щ": "ш", "ц": "с", "ж": "з", "ш": "с",
+            "ы": "и", "э": "е", "ю": "у", "я": "а", "ё": "е",
+            "ь": "", "ъ": "",
+            # Специфичные замены
+            "работа": "работа", "работать": "работать", "работаю": "работаю",
+            "деньги": "деньги", "рубли": "рубли", "рублей": "рублей",
+            "такси": "такси", "машина": "машина", "дом": "дом",
+            "помыть": "помыть", "покрасить": "покрасить", "убрать": "убрать",
+            "материалы": "материалы", "инструменты": "инструменты",
+            "обед": "обед", "чай": "чай", "кофе": "кофе",
+            # Добавляем характерные окончания
+            "₽": " рублей",
+            ",": ", братан,",
+            ".": ", понял?"
+        }
+        
+        # Применяем замены
+        result = text.lower()
+        for original, replacement in dagestani_replacements.items():
+            result = result.replace(original, replacement)
+        
+        # Добавляем характерные фразы дагестанца
+        dagestani_phrases = [
+            " братан,", " понял?", " давай,", " быстро,", " качественно,",
+            " все даю,", " инструменты есть,", " материалы даю,"
+        ]
+        
+        # Случайно добавляем дагестанские фразы
+        if random.random() < 0.3:
+            phrase = random.choice(dagestani_phrases)
+            result += phrase
+        
+        # Добавляем характерные звуки
+        if random.random() < 0.2:
+            result = result.replace("а", "ах", 1)
+        if random.random() < 0.15:
+            result = result.replace("о", "ох", 1)
+            
+        return result
+
+    def generate_voice_message(self, text):
+        """Генерирует голосовое сообщение с дагестанским акцентом"""
+        try:
+            # Конвертируем текст в дагестанский акцент
+            dagestani_text = self.convert_to_dagestani_accent(text)
+            logger.info(f"Текст для озвучки: {dagestani_text}")
+            
+            # Создаем TTS с русским языком
+            tts = gTTS(text=dagestani_text, lang='ru', slow=False)
+            
+            # Сохраняем во временный файл
+            temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
+            tts.save(temp_audio.name)
+            temp_audio.close()
+            
+            # Конвертируем в OGG для Telegram (более компактный)
+            audio = AudioSegment.from_mp3(temp_audio.name)
+            temp_ogg = tempfile.NamedTemporaryFile(delete=False, suffix='.ogg')
+            audio.export(temp_ogg.name, format="ogg")
+            temp_ogg.close()
+            
+            # Удаляем временный MP3 файл
+            os.unlink(temp_audio.name)
+            
+            logger.info(f"Голосовое сообщение создано: {temp_ogg.name}")
+            return temp_ogg.name
+            
+        except Exception as e:
+            logger.error(f"Ошибка при создании голосового сообщения: {e}")
+            return None
+
     def search_churka_image(self):
         """Фоллбек: изображения с дагестанцами, таджиками и подобными."""
         try:
@@ -824,6 +904,60 @@ class WorkBot:
                     except Exception as final_e:
                         logger.error(f"💀 Финальная ошибка: {final_e}")
 
+    async def send_voice_message_to_channel(self):
+        """Отправляет голосовое сообщение в канал с дагестанским акцентом"""
+        message = self.generate_message()
+        max_retries = 3
+        
+        # Генерируем голосовое сообщение
+        voice_file = self.generate_voice_message(message)
+        if not voice_file:
+            logger.error("Не удалось создать голосовое сообщение, отправляем текст")
+            await self.send_message_to_channel()
+            return
+        
+        for attempt in range(max_retries):
+            try:
+                # Отправляем голосовое сообщение
+                with open(voice_file, 'rb') as voice:
+                    await asyncio.wait_for(
+                        self.bot.send_voice(
+                            chat_id=CHANNEL_ID, 
+                            voice=voice,
+                            caption=f"🎤 {message}"  # Добавляем текст как подпись
+                        ),
+                        timeout=60  # Больше времени для голосовых сообщений
+                    )
+                logger.info(f"🎤 Голосовое сообщение отправлено: {message}")
+                
+                # Удаляем временный файл
+                try:
+                    os.unlink(voice_file)
+                except:
+                    pass
+                return
+                    
+            except asyncio.TimeoutError:
+                logger.error(f"⏰ Таймаут отправки голосового сообщения (попытка {attempt + 1})")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(min(2 ** attempt, 30))
+                continue
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"❌ Ошибка отправки голосового сообщения (попытка {attempt + 1}): {error_msg}")
+                
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(min(2 ** attempt, 30))
+                else:
+                    logger.error(f"💀 Не удалось отправить голосовое сообщение, отправляем текст: {message}")
+                    # Фоллбек на текстовое сообщение
+                    try:
+                        os.unlink(voice_file)
+                    except:
+                        pass
+                    await self.send_message_to_channel()
+                    return
+
     def send_message_sync(self):
         """Синхронная обертка для отправки сообщения с улучшенным управлением event loop"""
         try:
@@ -866,30 +1000,72 @@ class WorkBot:
             finally:
                 loop.close()
 
+    def send_voice_message_sync(self):
+        """Синхронная обертка для отправки голосового сообщения"""
+        try:
+            # Проверяем, есть ли уже активный event loop
+            try:
+                loop = asyncio.get_running_loop()
+                # Если есть активный loop, создаем задачу
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(self._run_voice_in_new_loop)
+                    future.result(timeout=180)  # 3 минуты таймаут для голосовых
+            except RuntimeError:
+                # Нет активного loop, создаем новый
+                self._run_voice_in_new_loop()
+        except Exception as e:
+            logger.error(f"❌ Ошибка в send_voice_message_sync: {e}")
+            # Последняя попытка с простым asyncio.run
+            try:
+                asyncio.run(self.send_voice_message_to_channel())
+            except Exception as e2:
+                logger.error(f"❌ Критическая ошибка в send_voice_message_sync: {e2}")
+    
+    def _run_voice_in_new_loop(self):
+        """Запускает отправку голосового сообщения в новом event loop"""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self.send_voice_message_to_channel())
+        finally:
+            # Правильно закрываем loop
+            try:
+                # Отменяем все pending задачи
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            except Exception:
+                pass
+            finally:
+                loop.close()
+
     def schedule_messages(self):
-        """Планирует отправку сообщений 10 раз в день"""
-        # 7:00 утра
-        schedule.every().day.at("07:00").do(self.send_message_sync)
-        # 9:00 утра
+        """Планирует отправку сообщений 10 раз в день (2 голосовых, 8 текстовых)"""
+        # 7:00 утра - ГОЛОСОВОЕ СООБЩЕНИЕ
+        schedule.every().day.at("07:00").do(self.send_voice_message_sync)
+        # 9:00 утра - текстовое
         schedule.every().day.at("09:00").do(self.send_message_sync)
-        # 11:00 утра
+        # 11:00 утра - текстовое
         schedule.every().day.at("11:00").do(self.send_message_sync)
-        # 13:00 дня
+        # 13:00 дня - текстовое
         schedule.every().day.at("13:00").do(self.send_message_sync)
-        # 15:00 дня
+        # 15:00 дня - текстовое
         schedule.every().day.at("15:00").do(self.send_message_sync)
-        # 17:00 дня
-        schedule.every().day.at("17:00").do(self.send_message_sync)
-        # 19:00 вечера
+        # 17:00 дня - ГОЛОСОВОЕ СООБЩЕНИЕ
+        schedule.every().day.at("17:00").do(self.send_voice_message_sync)
+        # 19:00 вечера - текстовое
         schedule.every().day.at("19:00").do(self.send_message_sync)
-        # 21:00 вечера
+        # 21:00 вечера - текстовое
         schedule.every().day.at("21:00").do(self.send_message_sync)
-        # 23:00 вечера
+        # 23:00 вечера - текстовое
         schedule.every().day.at("23:00").do(self.send_message_sync)
-        # 1:00 ночи
+        # 1:00 ночи - текстовое
         schedule.every().day.at("01:00").do(self.send_message_sync)
         
-        logger.info("Расписание сообщений настроено: 07:00, 09:00, 11:00, 13:00, 15:00, 17:00, 19:00, 21:00, 23:00, 01:00")
+        logger.info("Расписание сообщений настроено: 07:00 (🎤), 09:00, 11:00, 13:00, 15:00, 17:00 (🎤), 19:00, 21:00, 23:00, 01:00")
 
     def run_scheduler(self):
         """Запускает планировщик в отдельном потоке с улучшенной обработкой ошибок"""
@@ -922,25 +1098,25 @@ class WorkBot:
             
             try:
                 await self.send_message_to_channel()
-                logger.info("✅ Тестовое сообщение 1 отправлено")
+                logger.info("✅ Тестовое текстовое сообщение 1 отправлено")
             except Exception as e:
                 logger.error(f"❌ Ошибка тестового сообщения 1: {e}")
             
             await asyncio.sleep(5)
             
             try:
-                await self.send_message_to_channel()
-                logger.info("✅ Тестовое сообщение 2 отправлено")
+                await self.send_voice_message_to_channel()
+                logger.info("🎤 Тестовое голосовое сообщение отправлено")
             except Exception as e:
-                logger.error(f"❌ Ошибка тестового сообщения 2: {e}")
+                logger.error(f"❌ Ошибка тестового голосового сообщения: {e}")
             
             await asyncio.sleep(5)
             
             try:
                 await self.send_message_to_channel()
-                logger.info("✅ Тестовое сообщение 3 отправлено")
+                logger.info("✅ Тестовое текстовое сообщение 2 отправлено")
             except Exception as e:
-                logger.error(f"❌ Ошибка тестового сообщения 3: {e}")
+                logger.error(f"❌ Ошибка тестового сообщения 2: {e}")
             
             # Держим бота активным
             while True:

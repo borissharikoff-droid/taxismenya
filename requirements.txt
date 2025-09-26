@@ -5,3 +5,5 @@ Pillow==10.0.1
 beautifulsoup4==4.12.2
 lxml==4.9.3
 httpx==0.25.2
+gTTS==2.4.0
+pydub==0.25.1
