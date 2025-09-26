@@ -53,6 +53,7 @@ class WorkBot:
         self.bot = Bot(token=BOT_TOKEN, request=request)
         self.last_keywords = []
         self.voice_message_count = 0  # Счетчик голосовых сообщений
+        self.last_message_id = None  # ID последнего отправленного сообщения для reply
         
         # Инициализация ElevenLabs клиента
         if ELEVENLABS_API_KEY:
@@ -1100,10 +1101,12 @@ class WorkBot:
         for attempt in range(max_retries):
             try:
                 # Отправляем только текст с таймаутом
-                await asyncio.wait_for(
+                sent_message = await asyncio.wait_for(
                     self.bot.send_message(chat_id=CHANNEL_ID, text=message),
                     timeout=30  # 30 секунд таймаут на отправку
                 )
+                # Сохраняем ID сообщения для reply
+                self.last_message_id = sent_message.message_id
                 logger.info(f"✅ Текстовое сообщение отправлено: {message}")
                 return
                     
@@ -1158,10 +1161,14 @@ class WorkBot:
         message = self.generate_completion_message()
         max_retries = 3
         
+        # Если не указан reply_to_message_id, используем ID последнего сообщения
+        if reply_to_message_id is None:
+            reply_to_message_id = self.last_message_id
+        
         for attempt in range(max_retries):
             try:
                 # Отправляем сообщение с реплаем на предыдущее
-                await asyncio.wait_for(
+                sent_message = await asyncio.wait_for(
                     self.bot.send_message(
                         chat_id=CHANNEL_ID, 
                         text=message,
@@ -1169,7 +1176,9 @@ class WorkBot:
                     ),
                     timeout=30
                 )
-                logger.info(f"✅ Ответное сообщение отправлено: {message}")
+                # Сохраняем ID ответного сообщения
+                self.last_message_id = sent_message.message_id
+                logger.info(f"✅ Ответное сообщение отправлено (reply to {reply_to_message_id}): {message}")
                 return
                     
             except asyncio.TimeoutError:
@@ -1202,7 +1211,7 @@ class WorkBot:
             try:
                 # Отправляем голосовое сообщение
                 with open(voice_file, 'rb') as voice:
-                    await asyncio.wait_for(
+                    sent_message = await asyncio.wait_for(
                         self.bot.send_voice(
                             chat_id=CHANNEL_ID, 
                             voice=voice,
@@ -1210,6 +1219,8 @@ class WorkBot:
                         ),
                         timeout=60  # Больше времени для голосовых сообщений
                     )
+                # Сохраняем ID сообщения для reply
+                self.last_message_id = sent_message.message_id
                 logger.info(f"🎤 Голосовое сообщение отправлено: {message}")
                 
                 # Удаляем временный файл
@@ -1455,6 +1466,7 @@ class WorkBot:
             await asyncio.sleep(5)
             
             try:
+                # Отправляем ответное сообщение с reply на предыдущее
                 await self.send_completion_message_to_channel()
                 logger.info("✅ Тестовое ответное сообщение отправлено")
             except Exception as e:
@@ -1463,6 +1475,7 @@ class WorkBot:
             await asyncio.sleep(5)
             
             try:
+                # Отправляем еще одно ответное сообщение с reply
                 await self.send_completion_message_to_channel()
                 logger.info("✅ Тестовое ответное сообщение 2 отправлено")
             except Exception as e:
