@@ -17,8 +17,8 @@ import io
 import httpx
 import signal
 import sys
-from gtts import gTTS
-from pydub import AudioSegment
+from elevenlabs.client import ElevenLabs
+from elevenlabs import play
 import re
 
 # Настройка логирования
@@ -35,6 +35,10 @@ PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY")
 UNSPLASH_API_KEY = os.getenv("UNSPLASH_API_KEY")
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
 
+# ElevenLabs конфигурация
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID")  # ID вашего клонированного голоса
+
 class WorkBot:
     def __init__(self):
         # Настройка HTTP клиента с увеличенными лимитами для Railway
@@ -49,6 +53,14 @@ class WorkBot:
         self.bot = Bot(token=BOT_TOKEN, request=request)
         self.last_keywords = []
         self.voice_message_count = 0  # Счетчик голосовых сообщений
+        
+        # Инициализация ElevenLabs клиента
+        if ELEVENLABS_API_KEY:
+            self.elevenlabs_client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+            logger.info("✅ ElevenLabs клиент инициализирован")
+        else:
+            self.elevenlabs_client = None
+            logger.warning("⚠️ ElevenLabs API ключ не найден, голосовые сообщения будут использовать gTTS")
         
         # Базовые элементы для генерации работ (бесконечная генерация)
         self.work_verbs = [
@@ -541,34 +553,65 @@ class WorkBot:
         return result
 
     def generate_voice_message(self, text):
-        """Генерирует голосовое сообщение с персональным стилем речи"""
+        """Генерирует голосовое сообщение с персональным стилем речи используя ElevenLabs"""
         try:
             # Конвертируем текст в персональный стиль речи
             personal_text = self.convert_to_personal_voice_style(text)
             logger.info(f"Текст для озвучки (персональный стиль): {personal_text}")
             
+            # Используем ElevenLabs если доступен
+            if self.elevenlabs_client and ELEVENLABS_VOICE_ID:
+                logger.info("🎤 Используем ElevenLabs для генерации голоса")
+                
+                # Генерируем аудио с помощью ElevenLabs
+                audio = self.elevenlabs_client.text_to_speech.convert(
+                    text=personal_text,
+                    voice_id=ELEVENLABS_VOICE_ID,
+                    model_id="eleven_multilingual_v2",
+                    output_format="mp3_44100_128"
+                )
+                
+                # Сохраняем во временный файл
+                temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
+                temp_audio.write(audio)
+                temp_audio.close()
+                
+                logger.info(f"✅ Голосовое сообщение создано с ElevenLabs: {temp_audio.name}")
+                return temp_audio.name
+                
+            else:
+                # Фоллбек на gTTS если ElevenLabs недоступен
+                logger.warning("⚠️ ElevenLabs недоступен, используем gTTS")
+                return self._generate_voice_with_gtts(personal_text)
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка при создании голосового сообщения: {e}")
+            # Фоллбек на gTTS при ошибке
+            try:
+                personal_text = self.convert_to_personal_voice_style(text)
+                return self._generate_voice_with_gtts(personal_text)
+            except Exception as e2:
+                logger.error(f"❌ Критическая ошибка в фоллбеке: {e2}")
+                return None
+    
+    def _generate_voice_with_gtts(self, text):
+        """Фоллбек метод для генерации голоса с помощью gTTS"""
+        try:
+            from gtts import gTTS
+            
             # Создаем TTS с русским языком
-            tts = gTTS(text=personal_text, lang='ru', slow=False)
+            tts = gTTS(text=text, lang='ru', slow=False)
             
             # Сохраняем во временный файл
             temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
             tts.save(temp_audio.name)
             temp_audio.close()
             
-            # Конвертируем в OGG для Telegram (более компактный)
-            audio = AudioSegment.from_mp3(temp_audio.name)
-            temp_ogg = tempfile.NamedTemporaryFile(delete=False, suffix='.ogg')
-            audio.export(temp_ogg.name, format="ogg")
-            temp_ogg.close()
-            
-            # Удаляем временный MP3 файл
-            os.unlink(temp_audio.name)
-            
-            logger.info(f"Голосовое сообщение создано (персональный стиль): {temp_ogg.name}")
-            return temp_ogg.name
+            logger.info(f"✅ Голосовое сообщение создано с gTTS (фоллбек): {temp_audio.name}")
+            return temp_audio.name
             
         except Exception as e:
-            logger.error(f"Ошибка при создании голосового сообщения: {e}")
+            logger.error(f"❌ Ошибка в gTTS фоллбеке: {e}")
             return None
 
     def search_churka_image(self):
