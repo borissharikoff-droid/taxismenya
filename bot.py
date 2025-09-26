@@ -15,6 +15,8 @@ from bs4 import BeautifulSoup
 from PIL import Image
 import io
 import httpx
+import signal
+import sys
 
 # Настройка логирования
 logging.basicConfig(
@@ -32,13 +34,14 @@ PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
 
 class WorkBot:
     def __init__(self):
-        # Настройка HTTP клиента с увеличенными лимитами
+        # Настройка HTTP клиента с увеличенными лимитами для Railway
         request = HTTPXRequest(
-            connection_pool_size=20,
-            pool_timeout=30,
-            read_timeout=30,
-            write_timeout=30,
-            connect_timeout=30
+            connection_pool_size=50,  # Увеличиваем размер пула
+            pool_timeout=60,          # Увеличиваем таймаут пула
+            read_timeout=60,          # Увеличиваем таймаут чтения
+            write_timeout=60,         # Увеличиваем таймаут записи
+            connect_timeout=60,       # Увеличиваем таймаут подключения
+            http_version="1.1"        # Используем HTTP/1.1 для стабильности
         )
         self.bot = Bot(token=BOT_TOKEN, request=request)
         self.last_keywords = []
@@ -761,47 +764,107 @@ class WorkBot:
             return None
 
     async def send_message_to_channel(self):
-        """Отправляет только текстовое сообщение в канал с повторными попытками"""
+        """Отправляет только текстовое сообщение в канал с улучшенными повторными попытками"""
         message = self.generate_message()
-        max_retries = 3
+        max_retries = 5  # Увеличиваем количество попыток
         
         for attempt in range(max_retries):
             try:
-                # Отправляем только текст
-                await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
+                # Отправляем только текст с таймаутом
+                await asyncio.wait_for(
+                    self.bot.send_message(chat_id=CHANNEL_ID, text=message),
+                    timeout=30  # 30 секунд таймаут на отправку
+                )
                 logger.info(f"✅ Текстовое сообщение отправлено: {message}")
                 return
                     
-            except Exception as e:
-                logger.error(f"❌ Ошибка отправки (попытка {attempt + 1}): {e}")
+            except asyncio.TimeoutError:
+                logger.error(f"⏰ Таймаут отправки (попытка {attempt + 1})")
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(2 ** attempt)  # Экспоненциальная задержка
+                    await asyncio.sleep(min(2 ** attempt, 30))  # Максимум 30 секунд задержки
+                continue
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"❌ Ошибка отправки (попытка {attempt + 1}): {error_msg}")
+                
+                # Специальная обработка для ошибок пула соединений
+                if "Pool timeout" in error_msg or "connection pool" in error_msg.lower():
+                    logger.warning("🔄 Обнаружена ошибка пула соединений, увеличиваем задержку")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(min(5 * (2 ** attempt), 60))  # Больше времени для восстановления пула
+                    continue
+                
+                # Специальная обработка для ошибок event loop
+                if "Event loop is closed" in error_msg:
+                    logger.warning("🔄 Обнаружена ошибка закрытого event loop")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(10)  # Даем время на восстановление
+                    continue
+                
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(min(2 ** attempt, 30))  # Экспоненциальная задержка с ограничением
                 else:
                     logger.error(f"💀 Не удалось отправить сообщение после {max_retries} попыток: {message}")
-                    # Последняя попытка
+                    # Последняя попытка с новым bot instance
                     try:
-                        await self.bot.send_message(chat_id=CHANNEL_ID, text=message)
+                        # Создаем новый bot instance для последней попытки
+                        new_request = HTTPXRequest(
+                            connection_pool_size=10,
+                            pool_timeout=30,
+                            read_timeout=30,
+                            write_timeout=30,
+                            connect_timeout=30
+                        )
+                        emergency_bot = Bot(token=BOT_TOKEN, request=new_request)
+                        await asyncio.wait_for(
+                            emergency_bot.send_message(chat_id=CHANNEL_ID, text=message),
+                            timeout=60
+                        )
                         logger.info(f"🆘 Резервное сообщение отправлено: {message}")
                     except Exception as final_e:
                         logger.error(f"💀 Финальная ошибка: {final_e}")
 
     def send_message_sync(self):
-        """Синхронная обертка для отправки сообщения"""
+        """Синхронная обертка для отправки сообщения с улучшенным управлением event loop"""
         try:
-            # Создаем новый event loop для каждого вызова
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            # Проверяем, есть ли уже активный event loop
             try:
-                loop.run_until_complete(self.send_message_to_channel())
-            finally:
-                loop.close()
+                loop = asyncio.get_running_loop()
+                # Если есть активный loop, создаем задачу
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(self._run_in_new_loop)
+                    future.result(timeout=120)  # 2 минуты таймаут
+            except RuntimeError:
+                # Нет активного loop, создаем новый
+                self._run_in_new_loop()
         except Exception as e:
             logger.error(f"❌ Ошибка в send_message_sync: {e}")
-            # Попытка с новым loop
+            # Последняя попытка с простым asyncio.run
             try:
                 asyncio.run(self.send_message_to_channel())
             except Exception as e2:
                 logger.error(f"❌ Критическая ошибка в send_message_sync: {e2}")
+    
+    def _run_in_new_loop(self):
+        """Запускает отправку сообщения в новом event loop"""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self.send_message_to_channel())
+        finally:
+            # Правильно закрываем loop
+            try:
+                # Отменяем все pending задачи
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            except Exception:
+                pass
+            finally:
+                loop.close()
 
     def schedule_messages(self):
         """Планирует отправку сообщений 10 раз в день"""
@@ -829,10 +892,14 @@ class WorkBot:
         logger.info("Расписание сообщений настроено: 07:00, 09:00, 11:00, 13:00, 15:00, 17:00, 19:00, 21:00, 23:00, 01:00")
 
     def run_scheduler(self):
-        """Запускает планировщик в отдельном потоке"""
+        """Запускает планировщик в отдельном потоке с улучшенной обработкой ошибок"""
         while True:
-            schedule.run_pending()
-            time.sleep(60)  # Проверяем каждую минуту
+            try:
+                schedule.run_pending()
+                time.sleep(60)  # Проверяем каждую минуту
+            except Exception as e:
+                logger.error(f"❌ Ошибка в планировщике: {e}")
+                time.sleep(60)  # Продолжаем работу даже при ошибке
 
     async def start_bot(self):
         """Запускает бота"""
@@ -883,16 +950,35 @@ class WorkBot:
             logger.error(f"Ошибка при запуске бота: {e}")
             raise
 
+def signal_handler(signum, frame):
+    """Обработчик сигналов для graceful shutdown"""
+    logger.info(f"Получен сигнал {signum}, завершаем работу...")
+    sys.exit(0)
+
 def main():
-    """Главная функция"""
+    """Главная функция с улучшенной обработкой ошибок для Railway"""
+    # Регистрируем обработчики сигналов
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     bot = WorkBot()
     
     try:
+        # Настраиваем event loop для Railway
+        if os.getenv("RAILWAY_ENVIRONMENT"):
+            # В Railway используем более консервативные настройки
+            asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+        
         asyncio.run(bot.start_bot())
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем")
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}")
+        # В Railway перезапускаемся при критических ошибках
+        if os.getenv("RAILWAY_ENVIRONMENT"):
+            logger.info("Перезапуск через 30 секунд...")
+            time.sleep(30)
+            main()  # Рекурсивный перезапуск
 
 if __name__ == "__main__":
     main()
