@@ -485,10 +485,10 @@ class WorkBot:
         return text.lower()
 
     def convert_to_personal_voice_style(self, text):
-        """Конвертирует текст под персональный стиль речи на основе анализа голоса"""
+        """Конвертирует текст под персональный стиль речи - медленно, естественно, с сильным говором"""
         # Словарь замен для персонального стиля речи
         voice_replacements = {
-            # Характерные звуковые замены
+            # Характерные звуковые замены (более сильные)
             "ч": "ш", "щ": "ш", "ц": "с", "ж": "з",
             "ы": "и", "э": "е", "ю": "у", "я": "а", "ё": "e",
             "ь": "", "ъ": "",
@@ -498,7 +498,7 @@ class WorkBot:
             "материалы": "матёриалы", "инструменты": "инструменты",
             "такси": "такси", "машина": "машина",
             
-            # Характерные фразы и междометия
+            # Характерные фразы и междометия (более естественные)
             "₽": " руб",
             ",": ", ну,",
             ".": ", понял?",
@@ -506,17 +506,20 @@ class WorkBot:
             "?": ", а?"
         }
         
-        # Характерные вставки
+        # Характерные вставки (более естественные и медленные)
         characteristic_insertions = [
             " ну,", " да,", " вот,", " так,", " значит,",
             " понимаешь,", " слушай,", " смотри,",
-            " короче,", " в общем,", " кстати,"
+            " короче,", " в общем,", " кстати,",
+            " блин,", " е-мое,", " вот так,", " как бы,",
+            " типа,", " вроде,", " как сказать,", " знаешь,"
         ]
         
-        # Эмоциональные усилители
+        # Эмоциональные усилители (более сильные)
         emotional_amplifiers = [
             " очень", " сильно", " реально", " конкретно",
-            " прям", " вообще", " совсем", " совсем-совсем"
+            " прям", " вообще", " совсем", " совсем-совсем",
+            " ого-го", " ваще", " реально", " конкретно"
         ]
         
         # Применяем замены
@@ -524,8 +527,8 @@ class WorkBot:
         for original, replacement in voice_replacements.items():
             result = result.replace(original, replacement)
         
-        # Добавляем характерные вставки
-        if random.random() < 0.4:  # 40% шанс
+        # Добавляем характерные вставки (увеличиваем шанс для более естественной речи)
+        if random.random() < 0.7:  # 70% шанс (было 40%)
             insertion = random.choice(characteristic_insertions)
             # Вставляем в случайное место
             words = result.split()
@@ -534,8 +537,8 @@ class WorkBot:
                 words.insert(insert_pos, insertion.strip())
                 result = " ".join(words)
         
-        # Добавляем эмоциональные усилители
-        if random.random() < 0.3:  # 30% шанс
+        # Добавляем эмоциональные усилители (увеличиваем шанс)
+        if random.random() < 0.5:  # 50% шанс (было 30%)
             amplifier = random.choice(emotional_amplifiers)
             # Добавляем к случайному слову
             words = result.split()
@@ -544,11 +547,34 @@ class WorkBot:
                 words[word_pos] = f"{amplifier} {words[word_pos]}"
                 result = " ".join(words)
         
-        # Добавляем характерные звуки
-        if random.random() < 0.2:
+        # Добавляем характерные звуки (увеличиваем шанс)
+        if random.random() < 0.4:  # 40% шанс (было 20%)
             result = result.replace("а", "ах", 1)
-        if random.random() < 0.15:
+        if random.random() < 0.3:  # 30% шанс (было 15%)
             result = result.replace("о", "ох", 1)
+        
+        # Добавляем паузы для более медленной речи
+        if random.random() < 0.6:  # 60% шанс
+            pause_insertions = [" ... ", " э-э-э ", " ммм ", " ааа "]
+            pause = random.choice(pause_insertions)
+            words = result.split()
+            if len(words) > 3:
+                insert_pos = random.randint(1, len(words) - 2)
+                words.insert(insert_pos, pause.strip())
+                result = " ".join(words)
+        
+        # Добавляем повторения слов для более естественной речи
+        if random.random() < 0.3:  # 30% шанс
+            words = result.split()
+            if len(words) > 2:
+                word_pos = random.randint(0, len(words) - 1)
+                word_to_repeat = words[word_pos]
+                words.insert(word_pos + 1, word_to_repeat)
+                result = " ".join(words)
+        
+        # Добавляем "ну" в начало для более естественного начала
+        if random.random() < 0.4:  # 40% шанс
+            result = "ну, " + result
             
         return result
 
@@ -568,7 +594,13 @@ class WorkBot:
                     text=personal_text,
                     voice_id=ELEVENLABS_VOICE_ID,
                     model_id="eleven_multilingual_v2",
-                    output_format="mp3_44100_128"
+                    output_format="mp3_44100_128",
+                    voice_settings={
+                        "stability": 0.5,  # Стабильность голоса (0-1)
+                        "similarity_boost": 0.8,  # Усиление сходства с оригиналом (0-1)
+                        "style": 0.3,  # Стиль речи (0-1)
+                        "use_speaker_boost": True  # Усиление голоса говорящего
+                    }
                 )
                 
                 # Сохраняем во временный файл
