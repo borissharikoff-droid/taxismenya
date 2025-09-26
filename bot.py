@@ -573,7 +573,9 @@ class WorkBot:
                 
                 # Сохраняем во временный файл
                 temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
-                temp_audio.write(audio)
+                # Конвертируем generator в bytes
+                audio_bytes = b''.join(audio)
+                temp_audio.write(audio_bytes)
                 temp_audio.close()
                 
                 logger.info(f"✅ Голосовое сообщение создано с ElevenLabs: {temp_audio.name}")
