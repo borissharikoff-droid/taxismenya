@@ -41,13 +41,13 @@ ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID")  # ID вашего кло
 
 class WorkBot:
     def __init__(self):
-        # Настройка HTTP клиента с увеличенными лимитами для Railway
+        # Настройка HTTP клиента с оптимизированными лимитами для Railway
         request = HTTPXRequest(
-            connection_pool_size=50,  # Увеличиваем размер пула
-            pool_timeout=60,          # Увеличиваем таймаут пула
-            read_timeout=60,          # Увеличиваем таймаут чтения
-            write_timeout=60,         # Увеличиваем таймаут записи
-            connect_timeout=60,       # Увеличиваем таймаут подключения
+            connection_pool_size=10,  # Уменьшаем размер пула для стабильности
+            pool_timeout=30,          # Уменьшаем таймаут пула
+            read_timeout=30,          # Уменьшаем таймаут чтения
+            write_timeout=30,         # Уменьшаем таймаут записи
+            connect_timeout=30,       # Уменьшаем таймаут подключения
             http_version="1.1"        # Используем HTTP/1.1 для стабильности
         )
         self.bot = Bot(token=BOT_TOKEN, request=request)
@@ -1144,10 +1144,23 @@ class WorkBot:
                     continue
                 
                 # Специальная обработка для ошибок event loop
-                if "Event loop is closed" in error_msg:
+                if "Event loop is closed" in error_msg or "RuntimeError" in error_msg:
                     logger.warning("🔄 Обнаружена ошибка закрытого event loop")
                     if attempt < max_retries - 1:
                         await asyncio.sleep(10)  # Даем время на восстановление
+                        # Создаем новый bot instance для следующей попытки
+                        try:
+                            new_request = HTTPXRequest(
+                                connection_pool_size=5,
+                                pool_timeout=20,
+                                read_timeout=20,
+                                write_timeout=20,
+                                connect_timeout=20
+                            )
+                            self.bot = Bot(token=BOT_TOKEN, request=new_request)
+                            logger.info("🔄 Создан новый bot instance")
+                        except Exception as bot_e:
+                            logger.error(f"❌ Ошибка создания нового bot instance: {bot_e}")
                     continue
                 
                 if attempt < max_retries - 1:
@@ -1207,6 +1220,25 @@ class WorkBot:
                 error_msg = str(e)
                 logger.error(f"❌ Ошибка отправки ответного сообщения (попытка {attempt + 1}): {error_msg}")
                 
+                # Специальная обработка для ошибок event loop
+                if "Event loop is closed" in error_msg or "RuntimeError" in error_msg:
+                    logger.warning("🔄 Обнаружена ошибка закрытого event loop в ответном сообщении")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(10)
+                        # Создаем новый bot instance для следующей попытки
+                        try:
+                            new_request = HTTPXRequest(
+                                connection_pool_size=5,
+                                pool_timeout=20,
+                                read_timeout=20,
+                                write_timeout=20,
+                                connect_timeout=20
+                            )
+                            self.bot = Bot(token=BOT_TOKEN, request=new_request)
+                            logger.info("🔄 Создан новый bot instance для ответного сообщения")
+                        except Exception as bot_e:
+                            logger.error(f"❌ Ошибка создания нового bot instance: {bot_e}")
+                
                 if attempt < max_retries - 1:
                     await asyncio.sleep(min(2 ** attempt, 30))
                 else:
@@ -1256,6 +1288,25 @@ class WorkBot:
                 error_msg = str(e)
                 logger.error(f"❌ Ошибка отправки голосового сообщения (попытка {attempt + 1}): {error_msg}")
                 
+                # Специальная обработка для ошибок event loop
+                if "Event loop is closed" in error_msg or "RuntimeError" in error_msg:
+                    logger.warning("🔄 Обнаружена ошибка закрытого event loop в голосовом сообщении")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(10)
+                        # Создаем новый bot instance для следующей попытки
+                        try:
+                            new_request = HTTPXRequest(
+                                connection_pool_size=5,
+                                pool_timeout=20,
+                                read_timeout=20,
+                                write_timeout=20,
+                                connect_timeout=20
+                            )
+                            self.bot = Bot(token=BOT_TOKEN, request=new_request)
+                            logger.info("🔄 Создан новый bot instance для голосового сообщения")
+                        except Exception as bot_e:
+                            logger.error(f"❌ Ошибка создания нового bot instance: {bot_e}")
+                
                 if attempt < max_retries - 1:
                     await asyncio.sleep(min(2 ** attempt, 30))
                 else:
@@ -1269,19 +1320,13 @@ class WorkBot:
                     return
 
     def send_message_sync(self):
-        """Синхронная обертка для отправки сообщения с улучшенным управлением event loop"""
+        """Синхронная обертка для отправки сообщения с упрощенным управлением event loop"""
         try:
-            # Проверяем, есть ли уже активный event loop
-            try:
-                loop = asyncio.get_running_loop()
-                # Если есть активный loop, создаем задачу
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(self._run_in_new_loop)
-                    future.result(timeout=120)  # 2 минуты таймаут
-            except RuntimeError:
-                # Нет активного loop, создаем новый
-                self._run_in_new_loop()
+            # Всегда создаем новый event loop для изоляции
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(self._run_in_new_loop)
+                future.result(timeout=120)  # 2 минуты таймаут
         except Exception as e:
             logger.error(f"❌ Ошибка в send_message_sync: {e}")
             # Последняя попытка с простым asyncio.run
@@ -1296,34 +1341,23 @@ class WorkBot:
         asyncio.set_event_loop(loop)
         try:
             loop.run_until_complete(self.send_message_to_channel())
+        except Exception as e:
+            logger.error(f"❌ Ошибка в новом event loop: {e}")
         finally:
-            # Правильно закрываем loop
+            # Простое и безопасное закрытие loop
             try:
-                # Отменяем все pending задачи
-                pending = asyncio.all_tasks(loop)
-                for task in pending:
-                    task.cancel()
-                if pending:
-                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                loop.close()
             except Exception:
                 pass
-            finally:
-                loop.close()
 
     def send_voice_message_sync(self):
         """Синхронная обертка для отправки голосового сообщения"""
         try:
-            # Проверяем, есть ли уже активный event loop
-            try:
-                loop = asyncio.get_running_loop()
-                # Если есть активный loop, создаем задачу
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(self._run_voice_in_new_loop)
-                    future.result(timeout=180)  # 3 минуты таймаут для голосовых
-            except RuntimeError:
-                # Нет активного loop, создаем новый
-                self._run_voice_in_new_loop()
+            # Всегда создаем новый event loop для изоляции
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(self._run_voice_in_new_loop)
+                future.result(timeout=180)  # 3 минуты таймаут для голосовых
         except Exception as e:
             logger.error(f"❌ Ошибка в send_voice_message_sync: {e}")
             # Последняя попытка с простым asyncio.run
@@ -1338,19 +1372,14 @@ class WorkBot:
         asyncio.set_event_loop(loop)
         try:
             loop.run_until_complete(self.send_voice_message_to_channel())
+        except Exception as e:
+            logger.error(f"❌ Ошибка в новом event loop для голоса: {e}")
         finally:
-            # Правильно закрываем loop
+            # Простое и безопасное закрытие loop
             try:
-                # Отменяем все pending задачи
-                pending = asyncio.all_tasks(loop)
-                for task in pending:
-                    task.cancel()
-                if pending:
-                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                loop.close()
             except Exception:
                 pass
-            finally:
-                loop.close()
 
     def send_completion_message_sync(self, reply_to_message_id=None):
         """Синхронная обертка для отправки ответного сообщения (всегда отвечает на последнее сообщение)"""
@@ -1359,17 +1388,11 @@ class WorkBot:
             if reply_to_message_id is None:
                 reply_to_message_id = self.last_message_id
             
-            # Проверяем, есть ли уже активный event loop
-            try:
-                loop = asyncio.get_running_loop()
-                # Если есть активный loop, создаем задачу
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(self._run_completion_in_new_loop, reply_to_message_id)
-                    future.result(timeout=120)  # 2 минуты таймаут
-            except RuntimeError:
-                # Нет активного loop, создаем новый
-                self._run_completion_in_new_loop(reply_to_message_id)
+            # Всегда создаем новый event loop для изоляции
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(self._run_completion_in_new_loop, reply_to_message_id)
+                future.result(timeout=120)  # 2 минуты таймаут
         except Exception as e:
             logger.error(f"❌ Ошибка в send_completion_message_sync: {e}")
             # Последняя попытка с простым asyncio.run
@@ -1384,19 +1407,14 @@ class WorkBot:
         asyncio.set_event_loop(loop)
         try:
             loop.run_until_complete(self.send_completion_message_to_channel(reply_to_message_id))
+        except Exception as e:
+            logger.error(f"❌ Ошибка в новом event loop для completion: {e}")
         finally:
-            # Правильно закрываем loop
+            # Простое и безопасное закрытие loop
             try:
-                # Отменяем все pending задачи
-                pending = asyncio.all_tasks(loop)
-                for task in pending:
-                    task.cancel()
-                if pending:
-                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                loop.close()
             except Exception:
                 pass
-            finally:
-                loop.close()
 
     def schedule_messages(self):
         """Планирует отправку сообщений 10 раз в день: 5 текстовых, 3 голосовых, 2 ответных"""
@@ -1431,6 +1449,13 @@ class WorkBot:
                 time.sleep(60)  # Проверяем каждую минуту
             except Exception as e:
                 logger.error(f"❌ Ошибка в планировщике: {e}")
+                # При критических ошибках перезапускаем планировщик
+                try:
+                    schedule.clear()
+                    self.schedule_messages()
+                    logger.info("🔄 Планировщик перезапущен")
+                except Exception as restart_e:
+                    logger.error(f"❌ Ошибка перезапуска планировщика: {restart_e}")
                 time.sleep(60)  # Продолжаем работу даже при ошибке
 
     async def start_bot(self):
@@ -1494,7 +1519,11 @@ class WorkBot:
             
             # Держим бота активным
             while True:
-                await asyncio.sleep(3600)  # Спим час
+                try:
+                    await asyncio.sleep(3600)  # Спим час
+                except Exception as e:
+                    logger.error(f"❌ Ошибка в основном цикле бота: {e}")
+                    await asyncio.sleep(60)  # Короткая пауза при ошибке
                 
         except Exception as e:
             logger.error(f"Ошибка при запуске бота: {e}")
@@ -1518,6 +1547,8 @@ def main():
         if os.getenv("RAILWAY_ENVIRONMENT"):
             # В Railway используем более консервативные настройки
             asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+            # Устанавливаем более короткие таймауты для Railway
+            logger.info("🚀 Запуск в Railway environment")
         
         asyncio.run(bot.start_bot())
     except KeyboardInterrupt:
@@ -1529,6 +1560,8 @@ def main():
             logger.info("Перезапуск через 30 секунд...")
             time.sleep(30)
             main()  # Рекурсивный перезапуск
+        else:
+            raise
 
 if __name__ == "__main__":
     main()
