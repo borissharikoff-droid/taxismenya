@@ -1185,10 +1185,14 @@ class WorkBot:
             from pydub import AudioSegment
             from pydub.effects import normalize
             
+            logger.info(f"🎤 Начинаем добавление звуковых эффектов к {audio_file_path}")
+            
             # Загружаем основное аудио
             main_audio = AudioSegment.from_mp3(audio_file_path)
+            logger.info(f"📊 Длительность основного аудио: {len(main_audio)} мс")
             
-            # Создаем звуковые эффекты программно
+            # ВСЕГДА добавляем звуковые эффекты (100% шанс)
+            # Приоритет для рыгания и пердежа
             sound_effects = {
                 "БУУУУРП": self.create_burp_sound(),
                 "БУРП": self.create_burp_sound(short=True),
@@ -1201,45 +1205,99 @@ class WorkBot:
                 "ИК": self.create_hickup_sound()
             }
             
-            # Добавляем случайные звуковые эффекты
-            if random.random() < 0.7:  # 70% шанс добавить эффект
-                effect_name = random.choice(list(sound_effects.keys()))
-                effect_audio = sound_effects[effect_name]
-                
-                # Вставляем эффект в случайное место
-                insert_pos = random.randint(1000, len(main_audio) - 1000)  # В миллисекундах
+            # Создаем взвешенный список (рыгание и пердеж чаще)
+            weighted_effects = []
+            for effect_name, effect_audio in sound_effects.items():
+                if "БУ" in effect_name or "ПУ" in effect_name:  # Рыгание и пердеж
+                    weighted_effects.extend([effect_name] * 3)  # В 3 раза чаще
+                else:
+                    weighted_effects.append(effect_name)
+            
+            # Добавляем ОБЯЗАТЕЛЬНО звуковые эффекты (приоритет рыганию и пердежу)
+            effect_name = random.choice(weighted_effects)
+            effect_audio = sound_effects[effect_name]
+            logger.info(f"🔊 Добавляем звуковой эффект: {effect_name}")
+            
+            # Вставляем эффект в случайное место
+            if len(main_audio) > 2000:
+                insert_pos = random.randint(500, len(main_audio) - 500)  # В миллисекундах
                 main_audio = main_audio[:insert_pos] + effect_audio + main_audio[insert_pos:]
+                logger.info(f"📍 Вставили эффект в позицию: {insert_pos} мс")
+            else:
+                # Если аудио короткое, добавляем в конец
+                main_audio = main_audio + effect_audio
+                logger.info("📍 Добавили эффект в конец аудио")
+            
+            # Добавляем второй эффект с 50% шансом (приоритет рыганию и пердежу)
+            if random.random() < 0.5:
+                effect_name2 = random.choice(weighted_effects)
+                effect_audio2 = sound_effects[effect_name2]
+                logger.info(f"🔊 Добавляем второй звуковой эффект: {effect_name2}")
+                
+                if len(main_audio) > 2000:
+                    insert_pos2 = random.randint(500, len(main_audio) - 500)
+                    main_audio = main_audio[:insert_pos2] + effect_audio2 + main_audio[insert_pos2:]
+                    logger.info(f"📍 Вставили второй эффект в позицию: {insert_pos2} мс")
+                else:
+                    main_audio = main_audio + effect_audio2
             
             # Сохраняем результат
             main_audio.export(audio_file_path, format="mp3")
-            logger.info(f"✅ Добавлены реальные звуковые эффекты в {audio_file_path}")
+            logger.info(f"✅ Сохранен аудио файл с звуковыми эффектами: {audio_file_path}")
+            logger.info(f"📊 Финальная длительность: {len(main_audio)} мс")
             
-        except ImportError:
-            logger.warning("⚠️ pydub не установлен, звуковые эффекты пропущены")
+        except ImportError as e:
+            logger.error(f"❌ pydub не установлен: {e}")
         except Exception as e:
             logger.error(f"❌ Ошибка при добавлении звуковых эффектов: {e}")
+            import traceback
+            logger.error(f"❌ Детали ошибки: {traceback.format_exc()}")
 
     def create_burp_sound(self, short=False):
-        """Создает звук рыгания"""
+        """Создает РЕАЛЬНЫЙ звук рыгания"""
         try:
             import pydub
             from pydub import AudioSegment
             import numpy as np
             
             # Создаем звук рыгания (низкочастотный шум)
-            duration = 500 if short else 1000  # миллисекунды
+            duration = 800 if short else 1500  # миллисекунды
             sample_rate = 44100
             
-            # Генерируем низкочастотный шум
-            t = np.linspace(0, duration/1000, int(sample_rate * duration/1000))
-            frequency = 80 + np.random.normal(0, 10)  # Низкая частота для рыгания
+            logger.info(f"🎤 Создаем звук рыгания длительностью {duration} мс")
             
-            # Создаем звук с затуханием
-            wave = np.sin(2 * np.pi * frequency * t) * np.exp(-t * 3)
-            wave = wave * 0.3  # Уменьшаем громкость
+            # Генерируем низкочастотный шум для рыгания
+            t = np.linspace(0, duration/1000, int(sample_rate * duration/1000))
+            
+            # Основная частота рыгания (низкая)
+            frequency1 = 60 + np.random.normal(0, 15)  # Низкая частота
+            frequency2 = 120 + np.random.normal(0, 20)  # Вторая гармоника
+            
+            # Создаем сложный звук рыгания
+            wave1 = np.sin(2 * np.pi * frequency1 * t) * 0.4
+            wave2 = np.sin(2 * np.pi * frequency2 * t) * 0.2
+            
+            # Добавляем шум для реалистичности
+            noise = np.random.normal(0, 0.1, len(t)) * 0.3
+            
+            # Объединяем все компоненты
+            combined_wave = wave1 + wave2 + noise
+            
+            # Создаем огибающую для реалистичного звука рыгания
+            # Резкое начало, затем затухание
+            envelope = np.concatenate([
+                np.linspace(0, 1, int(sample_rate * 0.1)),  # Резкое начало
+                np.exp(-t[int(sample_rate * 0.1):] * 2)     # Затухание
+            ])
+            
+            # Применяем огибающую
+            final_wave = combined_wave * envelope
+            
+            # Увеличиваем громкость для лучшей слышимости
+            final_wave = final_wave * 0.8
             
             # Конвертируем в AudioSegment
-            audio_data = (wave * 32767).astype(np.int16)
+            audio_data = (final_wave * 32767).astype(np.int16)
             audio_segment = AudioSegment(
                 audio_data.tobytes(),
                 frame_rate=sample_rate,
@@ -1247,33 +1305,48 @@ class WorkBot:
                 channels=1
             )
             
+            logger.info(f"✅ Создан звук рыгания: {len(audio_segment)} мс")
             return audio_segment
             
         except Exception as e:
             logger.error(f"❌ Ошибка создания звука рыгания: {e}")
+            import traceback
+            logger.error(f"❌ Детали ошибки: {traceback.format_exc()}")
             return AudioSegment.silent(duration=100)
 
     def create_fart_sound(self, short=False):
-        """Создает звук пердежа"""
+        """Создает РЕАЛЬНЫЙ звук пердежа"""
         try:
             import pydub
             from pydub import AudioSegment
             import numpy as np
             
-            duration = 300 if short else 800
+            duration = 500 if short else 1000
             sample_rate = 44100
+            
+            logger.info(f"🎤 Создаем звук пердежа длительностью {duration} мс")
             
             # Создаем звук пердежа (белый шум с фильтром)
             t = np.linspace(0, duration/1000, int(sample_rate * duration/1000))
             
-            # Белый шум
-            noise = np.random.normal(0, 0.1, len(t))
+            # Белый шум для пердежа
+            noise = np.random.normal(0, 0.2, len(t))
+            
+            # Добавляем низкочастотный компонент
+            low_freq = np.sin(2 * np.pi * 40 * t) * 0.3
+            
+            # Объединяем шум и низкую частоту
+            combined = noise + low_freq
             
             # Применяем фильтр для звука пердежа
-            filtered_noise = noise * np.exp(-t * 2)
+            envelope = np.exp(-t * 1.5)  # Затухание
+            filtered_sound = combined * envelope
+            
+            # Увеличиваем громкость
+            filtered_sound = filtered_sound * 0.9
             
             # Конвертируем в AudioSegment
-            audio_data = (filtered_noise * 16383).astype(np.int16)
+            audio_data = (filtered_sound * 16383).astype(np.int16)
             audio_segment = AudioSegment(
                 audio_data.tobytes(),
                 frame_rate=sample_rate,
@@ -1281,10 +1354,13 @@ class WorkBot:
                 channels=1
             )
             
+            logger.info(f"✅ Создан звук пердежа: {len(audio_segment)} мс")
             return audio_segment
             
         except Exception as e:
             logger.error(f"❌ Ошибка создания звука пердежа: {e}")
+            import traceback
+            logger.error(f"❌ Детали ошибки: {traceback.format_exc()}")
             return AudioSegment.silent(duration=100)
 
     def create_sniff_sound(self):
@@ -2282,18 +2358,52 @@ class WorkBot:
     def send_voice_message_sync(self):
         """Синхронная обертка для отправки голосового сообщения"""
         try:
-            # Всегда создаем новый event loop для изоляции
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(self._run_voice_in_new_loop)
-                future.result(timeout=180)  # 3 минуты таймаут для голосовых
+            # Генерируем сообщение
+            message = self.generate_message()
+            logger.info(f"📝 Сгенерировано сообщение: {message}")
+            
+            # Генерируем голосовое сообщение
+            voice_file = self.generate_voice_message(message)
+            if not voice_file:
+                logger.error("❌ Не удалось создать голосовое сообщение")
+                return
+            
+            # Отправляем через requests напрямую
+            self.send_voice_via_requests(voice_file, message)
+            logger.info(f"🎤 Голосовое сообщение отправлено: {message}")
+            
+            # Удаляем временный файл
+            try:
+                os.unlink(voice_file)
+            except:
+                pass
+                
         except Exception as e:
             logger.error(f"❌ Ошибка в send_voice_message_sync: {e}")
-            # Последняя попытка с простым asyncio.run
-            try:
-                asyncio.run(self.send_voice_message_to_channel())
-            except Exception as e2:
-                logger.error(f"❌ Критическая ошибка в send_voice_message_sync: {e2}")
+    
+    def send_voice_via_requests(self, voice_file, message):
+        """Отправляет голосовое сообщение через requests напрямую"""
+        try:
+            import requests
+            
+            url = f"https://api.telegram.org/bot{self.token}/sendVoice"
+            
+            with open(voice_file, 'rb') as voice:
+                files = {'voice': voice}
+                data = {
+                    'chat_id': self.channel_id,
+                    'caption': message[:1024]  # Ограничение Telegram
+                }
+                
+                response = requests.post(url, files=files, data=data, timeout=60)
+                
+                if response.status_code == 200:
+                    logger.info("✅ Голосовое сообщение отправлено через requests")
+                else:
+                    logger.error(f"❌ Ошибка отправки через requests: {response.status_code} - {response.text}")
+                    
+        except Exception as e:
+            logger.error(f"❌ Ошибка в send_voice_via_requests: {e}")
     
     def _run_voice_in_new_loop(self):
         """Запускает отправку голосового сообщения в новом event loop"""
@@ -2311,22 +2421,9 @@ class WorkBot:
                 pass
 
     def send_test_voice_messages(self, count=5):
-        """Отправляет тестовые голосовые сообщения подряд"""
-        logger.info(f"🎤 Начинаем отправку {count} тестовых голосовых сообщений")
-        
-        for i in range(count):
-            try:
-                logger.info(f"📤 Отправляем голосовое сообщение {i+1}/{count}")
-                self.send_voice_message_sync()
-                
-                # Пауза между сообщениями
-                if i < count - 1:
-                    time.sleep(2)
-                    
-            except Exception as e:
-                logger.error(f"❌ Ошибка при отправке тестового сообщения {i+1}: {e}")
-        
-        logger.info(f"✅ Отправка {count} тестовых голосовых сообщений завершена")
+        """Отправляет тестовые голосовые сообщения подряд (ОТКЛЮЧЕНО для предотвращения спама)"""
+        logger.info("🚫 Тестовая отправка отключена для предотвращения спама")
+        return
 
     def send_completion_message_sync(self, reply_to_message_id=None):
         """Синхронная обертка для отправки ответного сообщения (всегда отвечает на последнее сообщение)"""
@@ -2364,29 +2461,17 @@ class WorkBot:
                 pass
 
     def schedule_messages(self):
-        """Планирует отправку сообщений 8 раз в день: 4 голосовых, 2 текстовых, 2 ответных"""
-        # 7:00 утра - ГОЛОСОВОЕ СООБЩЕНИЕ
-        schedule.every().day.at("07:00").do(self.send_voice_message_sync)
-        # 9:00 утра - ТЕКСТОВОЕ СООБЩЕНИЕ
-        schedule.every().day.at("09:00").do(self.send_message_sync)
-        # 11:00 утра - ГОЛОСОВОЕ СООБЩЕНИЕ
-        schedule.every().day.at("11:00").do(self.send_voice_message_sync)
-        # 13:00 дня - ТЕКСТОВОЕ СООБЩЕНИЕ
-        schedule.every().day.at("13:00").do(self.send_message_sync)
-        # 15:00 дня - ГОЛОСОВОЕ СООБЩЕНИЕ
-        schedule.every().day.at("15:00").do(self.send_voice_message_sync)
-        # 17:00 дня - ГОЛОСОВОЕ СООБЩЕНИЕ
-        schedule.every().day.at("17:00").do(self.send_voice_message_sync)
-        # 19:00 вечера - ТЕКСТОВОЕ СООБЩЕНИЕ
-        schedule.every().day.at("19:00").do(self.send_message_sync)
-        # 21:00 вечера - ГОЛОСОВОЕ СООБЩЕНИЕ
-        schedule.every().day.at("21:00").do(self.send_voice_message_sync)
+        """Планирует отправку сообщений 4 раза в день: 2 голосовых, 1 текстовое, 1 ответное"""
+        # 9:00 утра - ГОЛОСОВОЕ СООБЩЕНИЕ
+        schedule.every().day.at("09:00").do(self.send_voice_message_sync)
+        # 15:00 дня - ТЕКСТОВОЕ СООБЩЕНИЕ
+        schedule.every().day.at("15:00").do(self.send_message_sync)
+        # 19:00 вечера - ГОЛОСОВОЕ СООБЩЕНИЕ
+        schedule.every().day.at("19:00").do(self.send_voice_message_sync)
         # 23:00 вечера - ответное сообщение (работа выполнена)
         schedule.every().day.at("23:00").do(self.send_completion_message_sync)
-        # 1:00 ночи - ответное сообщение (работа выполнена)
-        schedule.every().day.at("01:00").do(self.send_completion_message_sync)
         
-        logger.info("Расписание сообщений настроено: 07:00 (🎤), 09:00 (📝), 11:00 (🎤), 13:00 (📝), 15:00 (🎤), 17:00 (🎤), 19:00 (📝), 21:00 (🎤), 23:00 (✅), 01:00 (✅)")
+        logger.info("Расписание сообщений настроено: 09:00 (🎤), 15:00 (📝), 19:00 (🎤), 23:00 (✅)")
 
     def run_scheduler(self):
         """Запускает планировщик в отдельном потоке с улучшенной обработкой ошибок"""
@@ -2494,17 +2579,9 @@ def main():
     # Регистрируем обработчики сигналов
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-    
+
     bot = WorkBot()
-    
-    # Тестовая отправка 5 голосовых сообщений
-    try:
-        logger.info("🎤 Запускаем тестовую отправку 5 голосовых сообщений")
-        bot.send_test_voice_messages(5)
-        logger.info("✅ Тестовая отправка завершена")
-    except Exception as e:
-        logger.error(f"❌ Ошибка при тестовой отправке: {e}")
-    
+
     try:
         # Настраиваем event loop для Railway
         if os.getenv("RAILWAY_ENVIRONMENT"):
@@ -2512,7 +2589,7 @@ def main():
             asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
             # Устанавливаем более короткие таймауты для Railway
             logger.info("🚀 Запуск в Railway environment")
-        
+
         asyncio.run(bot.start_bot())
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем")
