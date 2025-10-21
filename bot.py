@@ -1178,6 +1178,254 @@ class WorkBot:
         
         return result
 
+    def add_real_sound_effects(self, audio_file_path):
+        """Добавляет реальные звуковые эффекты к аудио файлу"""
+        try:
+            import pydub
+            from pydub import AudioSegment
+            from pydub.effects import normalize
+            
+            # Загружаем основное аудио
+            main_audio = AudioSegment.from_mp3(audio_file_path)
+            
+            # Создаем звуковые эффекты программно
+            sound_effects = {
+                "БУУУУРП": self.create_burp_sound(),
+                "БУРП": self.create_burp_sound(short=True),
+                "ПУУУУК": self.create_fart_sound(),
+                "ПУК": self.create_fart_sound(short=True),
+                "СНОРРР": self.create_sniff_sound(),
+                "ХАРРР": self.create_cough_sound(),
+                "КХА-КХА": self.create_cough_sound(double=True),
+                "АПЧХИ": self.create_sneeze_sound(),
+                "ИК": self.create_hickup_sound()
+            }
+            
+            # Добавляем случайные звуковые эффекты
+            if random.random() < 0.7:  # 70% шанс добавить эффект
+                effect_name = random.choice(list(sound_effects.keys()))
+                effect_audio = sound_effects[effect_name]
+                
+                # Вставляем эффект в случайное место
+                insert_pos = random.randint(1000, len(main_audio) - 1000)  # В миллисекундах
+                main_audio = main_audio[:insert_pos] + effect_audio + main_audio[insert_pos:]
+            
+            # Сохраняем результат
+            main_audio.export(audio_file_path, format="mp3")
+            logger.info(f"✅ Добавлены реальные звуковые эффекты в {audio_file_path}")
+            
+        except ImportError:
+            logger.warning("⚠️ pydub не установлен, звуковые эффекты пропущены")
+        except Exception as e:
+            logger.error(f"❌ Ошибка при добавлении звуковых эффектов: {e}")
+
+    def create_burp_sound(self, short=False):
+        """Создает звук рыгания"""
+        try:
+            import pydub
+            from pydub import AudioSegment
+            import numpy as np
+            
+            # Создаем звук рыгания (низкочастотный шум)
+            duration = 500 if short else 1000  # миллисекунды
+            sample_rate = 44100
+            
+            # Генерируем низкочастотный шум
+            t = np.linspace(0, duration/1000, int(sample_rate * duration/1000))
+            frequency = 80 + np.random.normal(0, 10)  # Низкая частота для рыгания
+            
+            # Создаем звук с затуханием
+            wave = np.sin(2 * np.pi * frequency * t) * np.exp(-t * 3)
+            wave = wave * 0.3  # Уменьшаем громкость
+            
+            # Конвертируем в AudioSegment
+            audio_data = (wave * 32767).astype(np.int16)
+            audio_segment = AudioSegment(
+                audio_data.tobytes(),
+                frame_rate=sample_rate,
+                sample_width=2,
+                channels=1
+            )
+            
+            return audio_segment
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания звука рыгания: {e}")
+            return AudioSegment.silent(duration=100)
+
+    def create_fart_sound(self, short=False):
+        """Создает звук пердежа"""
+        try:
+            import pydub
+            from pydub import AudioSegment
+            import numpy as np
+            
+            duration = 300 if short else 800
+            sample_rate = 44100
+            
+            # Создаем звук пердежа (белый шум с фильтром)
+            t = np.linspace(0, duration/1000, int(sample_rate * duration/1000))
+            
+            # Белый шум
+            noise = np.random.normal(0, 0.1, len(t))
+            
+            # Применяем фильтр для звука пердежа
+            filtered_noise = noise * np.exp(-t * 2)
+            
+            # Конвертируем в AudioSegment
+            audio_data = (filtered_noise * 16383).astype(np.int16)
+            audio_segment = AudioSegment(
+                audio_data.tobytes(),
+                frame_rate=sample_rate,
+                sample_width=2,
+                channels=1
+            )
+            
+            return audio_segment
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания звука пердежа: {e}")
+            return AudioSegment.silent(duration=100)
+
+    def create_sniff_sound(self):
+        """Создает звук сморкания"""
+        try:
+            import pydub
+            from pydub import AudioSegment
+            import numpy as np
+            
+            duration = 400
+            sample_rate = 44100
+            
+            # Создаем звук сморкания (высокочастотный шум)
+            t = np.linspace(0, duration/1000, int(sample_rate * duration/1000))
+            frequency = 2000 + np.random.normal(0, 200)
+            
+            wave = np.sin(2 * np.pi * frequency * t) * np.exp(-t * 4)
+            wave = wave * 0.2
+            
+            audio_data = (wave * 16383).astype(np.int16)
+            audio_segment = AudioSegment(
+                audio_data.tobytes(),
+                frame_rate=sample_rate,
+                sample_width=2,
+                channels=1
+            )
+            
+            return audio_segment
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания звука сморкания: {e}")
+            return AudioSegment.silent(duration=100)
+
+    def create_cough_sound(self, double=False):
+        """Создает звук кашля"""
+        try:
+            import pydub
+            from pydub import AudioSegment
+            import numpy as np
+            
+            duration = 600 if double else 300
+            sample_rate = 44100
+            
+            # Создаем звук кашля
+            t = np.linspace(0, duration/1000, int(sample_rate * duration/1000))
+            
+            # Комбинация частот для кашля
+            wave1 = np.sin(2 * np.pi * 150 * t) * 0.3
+            wave2 = np.sin(2 * np.pi * 300 * t) * 0.2
+            wave3 = np.random.normal(0, 0.1, len(t)) * 0.1
+            
+            combined_wave = (wave1 + wave2 + wave3) * np.exp(-t * 2)
+            
+            if double:
+                # Двойной кашель
+                combined_wave = np.concatenate([combined_wave, np.zeros(int(sample_rate * 0.1)), combined_wave])
+            
+            audio_data = (combined_wave * 16383).astype(np.int16)
+            audio_segment = AudioSegment(
+                audio_data.tobytes(),
+                frame_rate=sample_rate,
+                sample_width=2,
+                channels=1
+            )
+            
+            return audio_segment
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания звука кашля: {e}")
+            return AudioSegment.silent(duration=100)
+
+    def create_sneeze_sound(self):
+        """Создает звук чихания"""
+        try:
+            import pydub
+            from pydub import AudioSegment
+            import numpy as np
+            
+            duration = 800
+            sample_rate = 44100
+            
+            # Создаем звук чихания
+            t = np.linspace(0, duration/1000, int(sample_rate * duration/1000))
+            
+            # Высокочастотный звук с резким началом
+            frequency = 1000 + np.random.normal(0, 100)
+            wave = np.sin(2 * np.pi * frequency * t)
+            
+            # Резкое начало и затухание
+            envelope = np.concatenate([
+                np.linspace(0, 1, int(sample_rate * 0.05)),  # Резкое начало
+                np.exp(-t[int(sample_rate * 0.05):] * 5)     # Затухание
+            ])
+            
+            wave = wave * envelope * 0.3
+            
+            audio_data = (wave * 16383).astype(np.int16)
+            audio_segment = AudioSegment(
+                audio_data.tobytes(),
+                frame_rate=sample_rate,
+                sample_width=2,
+                channels=1
+            )
+            
+            return audio_segment
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания звука чихания: {e}")
+            return AudioSegment.silent(duration=100)
+
+    def create_hickup_sound(self):
+        """Создает звук икоты"""
+        try:
+            import pydub
+            from pydub import AudioSegment
+            import numpy as np
+            
+            duration = 200
+            sample_rate = 44100
+            
+            # Создаем звук икоты
+            t = np.linspace(0, duration/1000, int(sample_rate * duration/1000))
+            frequency = 120 + np.random.normal(0, 20)
+            
+            wave = np.sin(2 * np.pi * frequency * t) * np.exp(-t * 8)
+            wave = wave * 0.4
+            
+            audio_data = (wave * 16383).astype(np.int16)
+            audio_segment = AudioSegment(
+                audio_data.tobytes(),
+                frame_rate=sample_rate,
+                sample_width=2,
+                channels=1
+            )
+            
+            return audio_segment
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания звука икоты: {e}")
+            return AudioSegment.silent(duration=100)
+
     def generate_completion_message(self):
         """Генерирует ответное сообщение от работодателя о том, что работа выполнена"""
         # Выбираем основную фразу
@@ -1206,23 +1454,24 @@ class WorkBot:
             
             # Добавляем звуковые эффекты (80% шанс)
             if random.random() < 0.8:
+                # Реальные звуковые эффекты (будут добавлены в аудио)
                 sound_effects = [
-                    # Рыгание
-                    " *рыгает* ", " *отрыгивает* ", " *рыгнул* ", " *рыгает громко* ",
-                    # Сморкание
-                    " *сморкается* ", " *высморкался* ", " *сморкает* ", " *сопли вытирает* ",
-                    # Отхаркивание
-                    " *отхаркивается* ", " *харкает* ", " *откашливается* ", " *мокроту сплевывает* ",
-                    # Пердеж
-                    " *пердит* ", " *пукает* ", " *перднул* ", " *газы выпускает* ",
-                    # Кашель
-                    " *кашляет* ", " *покашливает* ", " *закашлялся* ", " *кашляет сильно* ",
-                    # Другие эффекты
-                    " *тупит* ", " *икает* ", " *чихает* ", " *зевает* ",
-                    " *вздыхает* ", " *мычит* ", " *кряхтит* ", " *хмыкает* ",
-                    " *сопит* ", " *хрюкает* ", " *крякает* ", " *мычит* ",
+                    # Рыгание - реальные звуки
+                    " *БУУУУРП* ", " *БУРП* ", " *БУУУРП* ", " *БУРП-БУРП* ",
+                    # Сморкание - реальные звуки  
+                    " *СНОРРР* ", " *СНОР* ", " *СНОРРРР* ", " *СНОР-СНОР* ",
+                    # Отхаркивание - реальные звуки
+                    " *ХАРРР* ", " *ХАР* ", " *ХАРРРР* ", " *ХАР-ХАР* ",
+                    # Пердеж - реальные звуки
+                    " *ПУУУУК* ", " *ПУК* ", " *ПУУУУК* ", " *ПУК-ПУК* ",
+                    # Кашель - реальные звуки
+                    " *КХА-КХА* ", " *КХА* ", " *КХА-КХА-КХА* ", " *КХААА* ",
+                    # Другие эффекты - реальные звуки
+                    " *ИК* ", " *АПЧХИ* ", " *ЗЕВ* ", " *ВЗДОХ* ",
+                    " *МУУ* ", " *КРЯХ* ", " *ХМ* ", " *СОП* ",
+                    " *ХРЮ* ", " *КРЯ* ", " *МУ* ", " *МУ* ",
                     # Театральные эффекты
-                    " *пауза* ", " *шепотом* ", " *громко* ", " *тихо* ", " *кричит* "
+                    " *ПАУЗА* ", " *ШЕПОТ* ", " *ГРОМКО* ", " *ТИХО* ", " *КРИК* "
                 ]
                 effect = random.choice(sound_effects)
                 # Вставляем эффект в случайное место
@@ -1270,6 +1519,9 @@ class WorkBot:
                 audio_bytes = b''.join(audio)
                 temp_audio.write(audio_bytes)
                 temp_audio.close()
+                
+                # Добавляем реальные звуковые эффекты
+                self.add_real_sound_effects(temp_audio.name)
                 
                 logger.info(f"✅ Голосовое сообщение создано с ElevenLabs: {temp_audio.name}")
                 return temp_audio.name
