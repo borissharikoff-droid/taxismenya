@@ -1180,34 +1180,35 @@ class WorkBot:
         
         return result
 
-    def speedup_audio(self, audio_file_path, speed=1.3):
-        """Ускоряет аудио файл на указанный коэффициент (1.3 = на 30% быстрее)"""
+    def speedup_audio(self, audio_file_path, speed=1.0):
+        """Изменяет скорость аудио (speed > 1 = быстрее, speed < 1 = медленнее)"""
         try:
             from pydub import AudioSegment
-            from pydub.effects import speedup as pydub_speedup
             
-            logger.info(f"🏃 Ускоряем аудио в {speed}x раз...")
+            if speed > 1:
+                logger.info(f"🏃 Ускоряем аудио в {speed}x раз...")
+            else:
+                logger.info(f"🐌 Замедляем аудио до {speed}x скорости (грубый медленный говор)...")
             
             # Загружаем аудио
             audio = AudioSegment.from_mp3(audio_file_path)
             
-            # Ускоряем (простой метод - изменяем frame rate)
-            # Увеличиваем frame_rate на коэффициент скорости
+            # Изменяем скорость (простой метод - изменяем frame rate)
             sound_with_altered_frame_rate = audio._spawn(audio.raw_data, overrides={
                 "frame_rate": int(audio.frame_rate * speed)
             })
             
             # Конвертируем обратно к стандартной частоте
-            faster_audio = sound_with_altered_frame_rate.set_frame_rate(audio.frame_rate)
+            modified_audio = sound_with_altered_frame_rate.set_frame_rate(audio.frame_rate)
             
             # Сохраняем
-            faster_audio.export(audio_file_path, format="mp3")
+            modified_audio.export(audio_file_path, format="mp3")
             
-            logger.info(f"✅ Аудио ускорено в {speed}x раз")
+            logger.info(f"✅ Аудио изменено до {speed}x скорости")
             return audio_file_path
             
         except Exception as e:
-            logger.warning(f"⚠️ Не удалось ускорить аудио: {e}. Используем оригинал")
+            logger.warning(f"⚠️ Не удалось изменить скорость аудио: {e}. Используем оригинал")
             return audio_file_path
     
     def add_real_sound_effects(self, audio_file_path):
@@ -1237,11 +1238,11 @@ class WorkBot:
                 "ИК": self.create_hickup_sound()
             }
             
-            # Создаем взвешенный список (рыгание и пердеж чаще)
+            # Создаем взвешенный список (рыгание и пердеж НАМНОГО чаще)
             weighted_effects = []
             for effect_name, effect_audio in sound_effects.items():
                 if "БУ" in effect_name or "ПУ" in effect_name:  # Рыгание и пердеж
-                    weighted_effects.extend([effect_name] * 3)  # В 3 раза чаще
+                    weighted_effects.extend([effect_name] * 5)  # В 5 раз чаще! 🔥
                 else:
                     weighted_effects.append(effect_name)
             
@@ -1260,8 +1261,8 @@ class WorkBot:
                 main_audio = main_audio + effect_audio
                 logger.info("📍 Добавили эффект в конец аудио")
             
-            # Добавляем второй эффект с 50% шансом (приоритет рыганию и пердежу)
-            if random.random() < 0.5:
+            # Добавляем второй эффект с 80% шансом (приоритет рыганию и пердежу)
+            if random.random() < 0.8:
                 effect_name2 = random.choice(weighted_effects)
                 effect_audio2 = sound_effects[effect_name2]
                 logger.info(f"🔊 Добавляем второй звуковой эффект: {effect_name2}")
@@ -1325,8 +1326,8 @@ class WorkBot:
             # Применяем огибающую
             final_wave = combined_wave * envelope
             
-            # Увеличиваем громкость для лучшей слышимости
-            final_wave = final_wave * 0.8
+            # Увеличиваем громкость для МАКСИМАЛЬНОЙ слышимости рыганья 🔊
+            final_wave = final_wave * 1.2
             
             # Конвертируем в AudioSegment
             audio_data = (final_wave * 32767).astype(np.int16)
@@ -1374,8 +1375,8 @@ class WorkBot:
             envelope = np.exp(-t * 1.5)  # Затухание
             filtered_sound = combined * envelope
             
-            # Увеличиваем громкость
-            filtered_sound = filtered_sound * 0.9
+            # Увеличиваем громкость пердежа для МАКСИМАЛЬНОЙ слышимости 🔊
+            filtered_sound = filtered_sound * 1.5
             
             # Конвертируем в AudioSegment
             audio_data = (filtered_sound * 16383).astype(np.int16)
@@ -1607,16 +1608,16 @@ class WorkBot:
             if self.elevenlabs_client and ELEVENLABS_VOICE_ID:
                 logger.info("🎤 Используем ElevenLabs для генерации голоса")
                 
-                # Генерируем аудио с помощью ElevenLabs (оптимизировано для русского)
+                # Генерируем аудио с помощью ElevenLabs (грубый дагестанский говор)
                 audio = self.elevenlabs_client.text_to_speech.convert(
                     text=personal_text,
                     voice_id=ELEVENLABS_VOICE_ID,
                     model_id="eleven_multilingual_v2",  # Многоязычная модель для русского
                     output_format="mp3_44100_128",
                     voice_settings={
-                        "stability": 0.8,  # Высокая стабильность для четкого произношения
-                        "similarity_boost": 0.9,  # Максимальное сходство с оригиналом
-                        "style": 0.1,  # Минимальный стиль для естественного звучания
+                        "stability": 0.4,  # Низкая стабильность для грубого, естественного звучания
+                        "similarity_boost": 0.75,  # Средняя схожесть, больше вариативности
+                        "style": 0.6,  # Высокий стиль для драматичности и эмоциональности
                         "use_speaker_boost": True  # Усиление голоса говорящего
                     }
                 )
@@ -1628,8 +1629,8 @@ class WorkBot:
                 temp_audio.write(audio_bytes)
                 temp_audio.close()
                 
-                # Ускоряем голос на 30%
-                self.speedup_audio(temp_audio.name, speed=1.3)
+                # Замедляем голос на 15% для более грубого и естественного звучания (как дагестанец)
+                self.speedup_audio(temp_audio.name, speed=0.85)
                 
                 # Добавляем реальные звуковые эффекты
                 self.add_real_sound_effects(temp_audio.name)
