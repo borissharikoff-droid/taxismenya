@@ -58,8 +58,10 @@ class WorkBot:
         # Система предотвращения коллизий
         self.recent_messages = []  # Последние 20 сообщений
         self.recent_works = []     # Последние 50 работ
+        self.recent_images = []    # Последние 100 URL изображений
         self.max_recent_messages = 20
         self.max_recent_works = 50
+        self.max_recent_images = 100
         
         # Инициализация ElevenLabs клиента
         if ELEVENLABS_API_KEY:
@@ -1178,6 +1180,36 @@ class WorkBot:
         
         return result
 
+    def speedup_audio(self, audio_file_path, speed=1.3):
+        """Ускоряет аудио файл на указанный коэффициент (1.3 = на 30% быстрее)"""
+        try:
+            from pydub import AudioSegment
+            from pydub.effects import speedup as pydub_speedup
+            
+            logger.info(f"🏃 Ускоряем аудио в {speed}x раз...")
+            
+            # Загружаем аудио
+            audio = AudioSegment.from_mp3(audio_file_path)
+            
+            # Ускоряем (простой метод - изменяем frame rate)
+            # Увеличиваем frame_rate на коэффициент скорости
+            sound_with_altered_frame_rate = audio._spawn(audio.raw_data, overrides={
+                "frame_rate": int(audio.frame_rate * speed)
+            })
+            
+            # Конвертируем обратно к стандартной частоте
+            faster_audio = sound_with_altered_frame_rate.set_frame_rate(audio.frame_rate)
+            
+            # Сохраняем
+            faster_audio.export(audio_file_path, format="mp3")
+            
+            logger.info(f"✅ Аудио ускорено в {speed}x раз")
+            return audio_file_path
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось ускорить аудио: {e}. Используем оригинал")
+            return audio_file_path
+    
     def add_real_sound_effects(self, audio_file_path):
         """Добавляет реальные звуковые эффекты к аудио файлу"""
         try:
@@ -1596,6 +1628,9 @@ class WorkBot:
                 temp_audio.write(audio_bytes)
                 temp_audio.close()
                 
+                # Ускоряем голос на 30%
+                self.speedup_audio(temp_audio.name, speed=1.3)
+                
                 # Добавляем реальные звуковые эффекты
                 self.add_real_sound_effects(temp_audio.name)
                 
@@ -1691,17 +1726,28 @@ class WorkBot:
                         headers = {"Authorization": f"Client-ID {UNSPLASH_API_KEY}"}
                         params = {
                             "query": keyword,
-                            "per_page": 20,
-                            "orientation": "all"
+                            "per_page": 30,  # Увеличиваем для большего разнообразия
+                            "orientation": "all",
+                            "page": random.randint(1, 5)  # Случайная страница для разнообразия
                         }
                         resp = requests.get(url, headers=headers, params=params, timeout=10)
                         resp.raise_for_status()
                         data = resp.json()
                         results = data.get("results", [])
                         if results:
-                            result = random.choice(results)
+                            # Фильтруем уже использованные изображения
+                            unused_results = [r for r in results if r.get("urls", {}).get("regular") not in self.recent_images]
+                            if unused_results:
+                                result = random.choice(unused_results)
+                            else:
+                                result = random.choice(results)  # Если все использованы, берем любое
+                            
                             image_url = result.get("urls", {}).get("regular")
                             if image_url:
+                                # Добавляем в список использованных
+                                self.recent_images.append(image_url)
+                                if len(self.recent_images) > self.max_recent_images:
+                                    self.recent_images.pop(0)
                                 logger.info(f"Найдено ассоциативное изображение '{keyword}' на Unsplash: {image_url}")
                                 return image_url
                     except Exception as e:
@@ -1758,7 +1804,8 @@ class WorkBot:
                         headers = {"Authorization": PEXELS_API_KEY}
                         params = {
                             "query": keyword,
-                            "per_page": 20,
+                            "per_page": 30,  # Увеличиваем для большего разнообразия
+                            "page": random.randint(1, 5),  # Случайная страница
                             "orientation": "all"
                         }
                         resp = requests.get(url, headers=headers, params=params, timeout=10)
@@ -1766,9 +1813,19 @@ class WorkBot:
                         data = resp.json()
                         photos = data.get("photos", [])
                         if photos:
-                            photo = random.choice(photos)
+                            # Фильтруем уже использованные изображения
+                            unused_photos = [p for p in photos if p.get("src", {}).get("medium") not in self.recent_images]
+                            if unused_photos:
+                                photo = random.choice(unused_photos)
+                            else:
+                                photo = random.choice(photos)  # Если все использованы, берем любое
+                            
                             image_url = photo.get("src", {}).get("medium")
                             if image_url:
+                                # Добавляем в список использованных
+                                self.recent_images.append(image_url)
+                                if len(self.recent_images) > self.max_recent_images:
+                                    self.recent_images.pop(0)
                                 logger.info(f"Найдено ассоциативное изображение '{keyword}' на Pexels: {image_url}")
                                 return image_url
                     except Exception as e:
@@ -1823,18 +1880,29 @@ class WorkBot:
                     try:
                         # Заменяем пробелы на + для Pixabay
                         query = keyword.replace(" ", "+")
+                        page = random.randint(1, 5)  # Случайная страница для разнообразия
                         url = (
                             f"https://pixabay.com/api/?key={PIXABAY_API_KEY}"
-                            f"&q={query}&image_type=photo&lang=en&safesearch=true&per_page=20&orientation=all"
+                            f"&q={query}&image_type=photo&lang=en&safesearch=true&per_page=30&page={page}&orientation=all"
                         )
                         resp = requests.get(url, timeout=10)
                         resp.raise_for_status()
                         data = resp.json()
                         hits = data.get("hits", [])
                         if hits:
-                            hit = random.choice(hits)
+                            # Фильтруем уже использованные изображения
+                            unused_hits = [h for h in hits if (h.get("webformatURL") or h.get("largeImageURL")) not in self.recent_images]
+                            if unused_hits:
+                                hit = random.choice(unused_hits)
+                            else:
+                                hit = random.choice(hits)  # Если все использованы, берем любое
+                            
                             image_url = hit.get("webformatURL") or hit.get("largeImageURL")
                             if image_url:
+                                # Добавляем в список использованных
+                                self.recent_images.append(image_url)
+                                if len(self.recent_images) > self.max_recent_images:
+                                    self.recent_images.pop(0)
                                 logger.info(f"Найдено ассоциативное изображение '{keyword}' на Pixabay: {image_url}")
                                 return image_url
                     except Exception as e:
@@ -2461,17 +2529,21 @@ class WorkBot:
                 pass
 
     def schedule_messages(self):
-        """Планирует отправку сообщений 4 раза в день: 2 голосовых, 1 текстовое, 1 ответное"""
-        # 9:00 утра - ГОЛОСОВОЕ СООБЩЕНИЕ
-        schedule.every().day.at("09:00").do(self.send_voice_message_sync)
-        # 15:00 дня - ТЕКСТОВОЕ СООБЩЕНИЕ
-        schedule.every().day.at("15:00").do(self.send_message_sync)
-        # 19:00 вечера - ГОЛОСОВОЕ СООБЩЕНИЕ
-        schedule.every().day.at("19:00").do(self.send_voice_message_sync)
-        # 23:00 вечера - ответное сообщение (работа выполнена)
+        """Планирует отправку сообщений 6 раз в день: 3 голосовых, 2 текстовых, 1 реплай"""
+        # 08:00 утра - ГОЛОСОВОЕ СООБЩЕНИЕ #1
+        schedule.every().day.at("08:00").do(self.send_voice_message_sync)
+        # 11:00 дня - ТЕКСТОВОЕ СООБЩЕНИЕ #1
+        schedule.every().day.at("11:00").do(self.send_message_sync)
+        # 14:00 дня - ГОЛОСОВОЕ СООБЩЕНИЕ #2
+        schedule.every().day.at("14:00").do(self.send_voice_message_sync)
+        # 17:00 вечера - ТЕКСТОВОЕ СООБЩЕНИЕ #2
+        schedule.every().day.at("17:00").do(self.send_message_sync)
+        # 20:00 вечера - ГОЛОСОВОЕ СООБЩЕНИЕ #3
+        schedule.every().day.at("20:00").do(self.send_voice_message_sync)
+        # 23:00 вечера - ОТВЕТНОЕ СООБЩЕНИЕ (работа выполнена)
         schedule.every().day.at("23:00").do(self.send_completion_message_sync)
         
-        logger.info("Расписание сообщений настроено: 09:00 (🎤), 15:00 (📝), 19:00 (🎤), 23:00 (✅)")
+        logger.info("Расписание сообщений настроено: 08:00 (🎤), 11:00 (📝), 14:00 (🎤), 17:00 (📝), 20:00 (🎤), 23:00 (✅)")
 
     def run_scheduler(self):
         """Запускает планировщик в отдельном потоке с улучшенной обработкой ошибок"""
@@ -2504,7 +2576,7 @@ class WorkBot:
             scheduler_thread = Thread(target=self.run_scheduler, daemon=True)
             scheduler_thread.start()
             
-            logger.info("Бот готов к работе! Сообщения будут отправляться в 07:00 (🎤), 09:00 (📝), 11:00 (🎤), 13:00 (📝), 15:00 (📝), 17:00 (🎤), 19:00 (📝), 21:00 (📝), 23:00 (✅), 01:00 (✅)")
+            logger.info("Бот готов к работе! Сообщения будут отправляться 6 раз в день: 08:00 (🎤), 11:00 (📝), 14:00 (🎤), 17:00 (📝), 20:00 (🎤), 23:00 (✅)")
             
             # Отправляем несколько тестовых сообщений для проверки
             logger.info("🚀 Отправляем тестовые сообщения...")
